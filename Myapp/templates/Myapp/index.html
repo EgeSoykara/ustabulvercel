@@ -81,10 +81,10 @@
           <span class="small text-muted">Sayfa {{ provider_page_obj.number }} / {{ provider_page_obj.paginator.num_pages }}</span>
           <div class="d-flex align-items-center gap-2">
             {% if provider_page_obj.has_previous %}
-              <a class="btn btn-sm btn-outline-secondary" href="{{ provider_page_query }}{% if provider_page_query %}&{% endif %}provider_page={{ provider_page_obj.previous_page_number }}">Önceki</a>
+              <a class="btn btn-sm btn-outline-secondary" href="?{{ provider_page_query }}{% if provider_page_query %}&{% endif %}provider_page={{ provider_page_obj.previous_page_number }}">Önceki</a>
             {% endif %}
             {% if provider_page_obj.has_next %}
-              <a class="btn btn-sm btn-outline-secondary" href="{{ provider_page_query }}{% if provider_page_query %}&{% endif %}provider_page={{ provider_page_obj.next_page_number }}">Sonraki</a>
+              <a class="btn btn-sm btn-outline-secondary" href="?{{ provider_page_query }}{% if provider_page_query %}&{% endif %}provider_page={{ provider_page_obj.next_page_number }}">Sonraki</a>
             {% endif %}
           </div>
         </div>

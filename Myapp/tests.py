@@ -113,6 +113,26 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Mahallendeki en iyi")
 
+    def test_index_provider_pagination_links_include_query_prefix(self):
+        for idx in range(4, 15):
+            user = User.objects.create_user(username=f"ekusta{idx}", password="GucluSifre123!")
+            provider = Provider.objects.create(
+                user=user,
+                full_name=f"Ek Usta {idx}",
+                city="Lefkosa",
+                district="Ortakoy",
+                phone=f"0555{idx:07d}",
+                rating=4.5,
+                is_verified=True,
+                is_available=True,
+            )
+            provider.service_types.add(self.service)
+
+        response = self.client.get(reverse("index"), data={"provider_page_size": "12"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["provider_page_obj"].has_next())
+        self.assertContains(response, 'href="?provider_page_size=12&provider_page=2"')
+
     def test_request_form_page_loads(self):
         response = self.client.get(reverse("request_form_page"))
         self.assertEqual(response.status_code, 200)
