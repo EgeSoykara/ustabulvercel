@@ -364,6 +364,11 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   white-space: nowrap;
 }
 
+.preferred-lock-field {
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--premium-surface-strong) 82%, #cbd5e1) !important;
+}
+
 @media (max-width: 991px) {
   .site-nav:hover,
   .panel-card:hover {

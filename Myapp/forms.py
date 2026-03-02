@@ -218,6 +218,7 @@ class ServiceRequestForm(forms.ModelForm):
             f"Detay alanı en fazla {SERVICE_REQUEST_DETAILS_MAX_LENGTH} karakter olabilir."
         )
         self._apply_preferred_provider_service_filter()
+        self._apply_preferred_provider_locks()
 
     def _extract_preferred_provider_id(self):
         raw_value = None
@@ -260,6 +261,56 @@ class ServiceRequestForm(forms.ModelForm):
                 "Secili usta icin uygun hizmetler listeleniyor."
             )
 
+    def _resolve_locked_service_for_preferred_provider(self, preferred_provider):
+        if not preferred_provider:
+            return None
+
+        raw_locked_service_id = ""
+        if self.is_bound:
+            raw_locked_service_id = (
+                self.data.get(self.add_prefix("preferred_provider_locked_service_id"))
+                or self.data.get("preferred_provider_locked_service_id")
+                or ""
+            )
+        else:
+            raw_locked_service_id = self.initial.get("preferred_provider_locked_service_id") or ""
+
+        locked_service = None
+        raw_text = str(raw_locked_service_id).strip()
+        if raw_text.isdigit():
+            locked_service = preferred_provider.service_types.filter(id=int(raw_text)).first()
+
+        if not locked_service:
+            locked_service = preferred_provider.service_types.order_by("id").first()
+
+        return locked_service
+
+    def _apply_preferred_provider_locks(self):
+        preferred_provider = self._resolve_preferred_provider()
+        if not preferred_provider:
+            return
+
+        locked_service = self._resolve_locked_service_for_preferred_provider(preferred_provider)
+
+        self.fields["preferred_provider_id"].initial = preferred_provider.id
+        self.initial["preferred_provider_id"] = preferred_provider.id
+
+        if locked_service:
+            self.fields["preferred_provider_locked_service_id"].initial = locked_service.id
+            self.initial["preferred_provider_locked_service_id"] = locked_service.id
+            self.initial["service_type"] = locked_service.id
+
+        self.fields["preferred_provider_locked_city"].initial = preferred_provider.city
+        self.fields["preferred_provider_locked_district"].initial = preferred_provider.district
+        self.initial["preferred_provider_locked_city"] = preferred_provider.city
+        self.initial["preferred_provider_locked_district"] = preferred_provider.district
+        self.initial["city"] = preferred_provider.city
+        self.initial["district"] = preferred_provider.district
+
+        self.fields["service_type"].widget.attrs["data-preferred-locked"] = "1"
+        self.fields["city"].widget.attrs["data-preferred-locked"] = "1"
+        self.fields["district"].widget.attrs["data-preferred-locked"] = "1"
+
     def clean_customer_phone(self):
         return normalize_phone_value(self.cleaned_data.get("customer_phone"))
 
@@ -273,23 +324,6 @@ class ServiceRequestForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        city = cleaned_data.get("city")
-        district = cleaned_data.get("district")
-        if not city or not district:
-            return cleaned_data
-
-        city_key = resolve_city_value(city)
-        if not city_key:
-            self.add_error("city", "Geçerli bir şehir seçin.")
-            return cleaned_data
-
-        resolved_district = resolve_district_value(city_key, district, include_any=True)
-        if not resolved_district:
-            self.add_error("district", "Seçilen ilçe, şehir ile eşleşmiyor.")
-            return cleaned_data
-
-        cleaned_data["city"] = city_key
-        cleaned_data["district"] = resolved_district
         preferred_provider = self._resolve_preferred_provider()
         preferred_provider_id = cleaned_data.get("preferred_provider_id")
         if preferred_provider_id:
@@ -304,47 +338,56 @@ class ServiceRequestForm(forms.ModelForm):
                 self.add_error("preferred_provider_id", "Secilen usta su an musait degil veya aktif degil.")
                 return cleaned_data
 
-            service_type = cleaned_data.get("service_type")
-            locked_service_id = cleaned_data.get("preferred_provider_locked_service_id")
-            if locked_service_id:
-                locked_service = preferred_provider.service_types.filter(id=locked_service_id).first()
-                if not locked_service:
-                    self.add_error("service_type", "Ozel usta secimi gecersiz. Lutfen tekrar deneyin.")
-                elif service_type and service_type.id != locked_service.id:
-                    self.add_error(
-                        "service_type",
-                        "Ozel usta modunda hizmet degistirilemez. Genel forma donerek secim yapin.",
-                    )
-                else:
-                    cleaned_data["service_type"] = locked_service
-                    service_type = locked_service
+            locked_service = self._resolve_locked_service_for_preferred_provider(preferred_provider)
+            if not locked_service:
+                self.add_error("service_type", "Secilen usta icin aktif hizmet bulunamadi.")
+                return cleaned_data
 
+            service_type = cleaned_data.get("service_type")
             if service_type and not preferred_provider.service_types.filter(id=service_type.id).exists():
                 self.add_error("service_type", "Secilen usta bu hizmet turunu sunmuyor.")
+            elif service_type and service_type.id != locked_service.id:
+                self.add_error(
+                    "service_type",
+                    "Ozel usta modunda hizmet degistirilemez. Genel forma donerek secim yapin.",
+                )
 
-            normalized_form_city = normalize_choice_value(city_key)
-            normalized_form_district = normalize_choice_value(resolved_district)
+            city = cleaned_data.get("city")
+            district = cleaned_data.get("district")
+            normalized_form_city = normalize_choice_value(city)
+            normalized_form_district = normalize_choice_value(district)
             normalized_provider_city = normalize_choice_value(preferred_provider.city)
             normalized_provider_district = normalize_choice_value(preferred_provider.district)
 
-            locked_city = normalize_choice_value(cleaned_data.get("preferred_provider_locked_city"))
-            locked_district = normalize_choice_value(cleaned_data.get("preferred_provider_locked_district"))
+            if normalized_form_city and normalized_form_city != normalized_provider_city:
+                self.add_error("city", "Ozel usta modunda sehir degistirilemez. Genel forma donerek secim yapin.")
+            if normalized_form_district and normalized_form_district != normalized_provider_district:
+                self.add_error("district", "Ozel usta modunda ilce degistirilemez. Genel forma donerek secim yapin.")
 
-            if locked_city:
-                if locked_city != normalized_provider_city:
-                    self.add_error("city", "Ozel usta secimi gecersiz. Lutfen tekrar deneyin.")
-                elif normalized_form_city != locked_city:
-                    self.add_error("city", "Ozel usta modunda sehir degistirilemez. Genel forma donerek secim yapin.")
-            elif normalized_form_city != normalized_provider_city:
-                self.add_error("city", "Secilen usta farkli bir sehirde hizmet veriyor.")
+            cleaned_data["service_type"] = locked_service
+            cleaned_data["preferred_provider_locked_service_id"] = locked_service.id
+            cleaned_data["city"] = preferred_provider.city
+            cleaned_data["district"] = preferred_provider.district
+            cleaned_data["preferred_provider_locked_city"] = preferred_provider.city
+            cleaned_data["preferred_provider_locked_district"] = preferred_provider.district
 
-            if locked_district:
-                if locked_district != normalized_provider_district:
-                    self.add_error("district", "Ozel usta secimi gecersiz. Lutfen tekrar deneyin.")
-                elif normalized_form_district != locked_district:
-                    self.add_error("district", "Ozel usta modunda ilce degistirilemez. Genel forma donerek secim yapin.")
-            elif normalized_form_district != normalized_provider_district:
-                self.add_error("district", "Secilen usta bu ilcede hizmet vermiyor.")
+        city = cleaned_data.get("city")
+        district = cleaned_data.get("district")
+        if not city or not district:
+            return cleaned_data
+
+        city_key = resolve_city_value(city)
+        if not city_key:
+            self.add_error("city", "Gecerli bir sehir secin.")
+            return cleaned_data
+
+        resolved_district = resolve_district_value(city_key, district, include_any=True)
+        if not resolved_district:
+            self.add_error("district", "Secilen ilce, sehir ile eslesmiyor.")
+            return cleaned_data
+
+        cleaned_data["city"] = city_key
+        cleaned_data["district"] = resolved_district
 
         cleaned_data["preferred_provider"] = preferred_provider
         return cleaned_data
@@ -884,3 +927,4 @@ class ServiceMessageForm(forms.ModelForm):
         if len(body) < 2:
             raise ValidationError("Mesaj en az 2 karakter olmalı.")
         return body
+

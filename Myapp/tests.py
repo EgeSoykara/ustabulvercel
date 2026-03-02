@@ -265,6 +265,9 @@ class MarketplaceTests(TestCase):
         self.assertIn("Secili usta icin uygun hizmetler listeleniyor.", request_form.fields["service_type"].help_text)
         self.assertEqual(request_form.initial.get("preferred_provider_locked_city"), self.provider_ali.city)
         self.assertEqual(request_form.initial.get("preferred_provider_locked_district"), self.provider_ali.district)
+        self.assertEqual(request_form.fields["service_type"].widget.attrs.get("data-preferred-locked"), "1")
+        self.assertEqual(request_form.fields["city"].widget.attrs.get("data-preferred-locked"), "1")
+        self.assertEqual(request_form.fields["district"].widget.attrs.get("data-preferred-locked"), "1")
 
     def test_preferred_provider_locked_service_rejects_manual_service_change(self):
         elektrik = ServiceType.objects.create(name="Elektrik", slug="elektrik")
@@ -2225,6 +2228,8 @@ class MarketplaceTests(TestCase):
         self.client.login(username="aliusta", password="GucluSifre123!")
         response = self.client.get(reverse("notifications"))
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'class="notification-unread-mark"')
+        self.assertNotContains(response, 'notification-item is-unread"')
 
         self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), 0)
         snapshot_response = self.client.get(reverse("provider_panel_snapshot"))

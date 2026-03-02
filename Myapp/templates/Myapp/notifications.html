@@ -8,8 +8,8 @@
       <p class="small text-muted mb-0 mt-1">Bildirimler son {{ notifications_retention_days }} gün için gösterilir.</p>
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap notifications-toolbar">
-      <span class="status-pill status-pending_customer">Okunmamış: {{ notifications_unread_count }}</span>
-      <form method="post" action="{% url 'notifications_mark_all_read' %}" class="m-0">
+      <span class="status-pill status-pending_customer" id="notifications-unread-pill">Okunmamış: {{ notifications_unread_count }}</span>
+      <form method="post" action="{% url 'notifications_mark_all_read' %}" class="m-0" id="notifications-mark-read-form">
         {% csrf_token %}
         <button type="submit" class="btn btn-sm btn-outline-secondary">
           <i class="bi bi-check2-all me-1"></i>Tümünü Okundu İşaretle
@@ -75,4 +75,73 @@
     {% endif %}
   </div>
 </section>
+
+<script>
+  (function () {
+    const form = document.getElementById("notifications-mark-read-form");
+    if (!form) return;
+
+    const csrfInput = form.querySelector("input[name='csrfmiddlewaretoken']");
+    const unreadPill = document.getElementById("notifications-unread-pill");
+    const markUrl = form.getAttribute("action");
+    const notificationsPath = "{% url 'notifications' %}";
+    if (!markUrl || !csrfInput) return;
+
+    let syncing = false;
+
+    function clearUnreadUi() {
+      const unreadItems = document.querySelectorAll(".notification-item.is-unread");
+      unreadItems.forEach(function (item) {
+        item.classList.remove("is-unread");
+      });
+
+      const unreadMarks = document.querySelectorAll(".notification-unread-mark");
+      unreadMarks.forEach(function (item) {
+        item.remove();
+      });
+
+      if (unreadPill) {
+        unreadPill.textContent = "Okunmamış: 0";
+      }
+
+      try {
+        window.dispatchEvent(new CustomEvent("ustabul:notifications-read"));
+      } catch (error) {
+        void error;
+      }
+    }
+
+    async function syncReadState() {
+      if (syncing || document.hidden || window.location.pathname !== notificationsPath) return;
+      syncing = true;
+      try {
+        const response = await fetch(markUrl, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRFToken": csrfInput.value
+          },
+          cache: "no-store"
+        });
+        if (response.ok) {
+          clearUnreadUi();
+        }
+      } catch (error) {
+        void error;
+      } finally {
+        syncing = false;
+      }
+    }
+
+    syncReadState();
+    window.setInterval(syncReadState, 7000);
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) {
+        syncReadState();
+      }
+    });
+  })();
+</script>
 {% endblock %}

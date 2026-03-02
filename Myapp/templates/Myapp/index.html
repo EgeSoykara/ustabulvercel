@@ -135,6 +135,7 @@
             <div class="alert alert-info mb-0 d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div>
                 <strong>Özel Usta:</strong> {{ preferred_provider.full_name }} ({{ preferred_provider.city }} / {{ preferred_provider.district }})
+                <div class="small mt-1 mb-0">Bu modda hizmet, şehir ve ilçe sabittir. Sadece isim, telefon ve arıza/iş detayı düzenlenebilir.</div>
               </div>
               <a href="{% url 'request_form_page' %}" class="btn btn-sm btn-outline-secondary">Genel Forma Dön</a>
             </div>
@@ -236,13 +237,53 @@
 
     const requestForm = document.getElementById("request-form");
     if (requestForm) {
+      const requestService = requestForm.querySelector("select[name='service_type']");
       const requestCity = requestForm.querySelector("select[name='city']");
       const requestDistrict = requestForm.querySelector("select[name='district']");
+      const preferredProviderIdInput = requestForm.querySelector("input[name='preferred_provider_id']");
+      const lockedServiceIdInput = requestForm.querySelector("input[name='preferred_provider_locked_service_id']");
+      const lockedCityInput = requestForm.querySelector("input[name='preferred_provider_locked_city']");
+      const lockedDistrictInput = requestForm.querySelector("input[name='preferred_provider_locked_district']");
+      const isPreferredProviderMode = Boolean((preferredProviderIdInput && preferredProviderIdInput.value) || "");
+
+      function lockSelectField(selectElement, lockedValue) {
+        if (!selectElement || !lockedValue) return;
+        const value = String(lockedValue);
+        const hasOption = Array.from(selectElement.options).some(function (option) {
+          return option.value === value;
+        });
+        if (hasOption) {
+          selectElement.value = value;
+        }
+        selectElement.dataset.lockedValue = value;
+        selectElement.setAttribute("aria-readonly", "true");
+        selectElement.title = "Bu alan özel usta seçimi nedeniyle sabittir.";
+        selectElement.classList.add("preferred-lock-field");
+
+        const preventInteraction = function (event) {
+          event.preventDefault();
+        };
+        selectElement.addEventListener("mousedown", preventInteraction);
+        selectElement.addEventListener("touchstart", preventInteraction, { passive: false });
+        selectElement.addEventListener("keydown", preventInteraction);
+        selectElement.addEventListener("change", function () {
+          selectElement.value = selectElement.dataset.lockedValue || value;
+        });
+      }
+
       if (requestCity && requestDistrict) {
         syncDistrictOptions(requestCity, requestDistrict);
-        requestCity.addEventListener("change", function () {
-          syncDistrictOptions(requestCity, requestDistrict);
-        });
+        if (!isPreferredProviderMode) {
+          requestCity.addEventListener("change", function () {
+            syncDistrictOptions(requestCity, requestDistrict);
+          });
+        }
+      }
+
+      if (isPreferredProviderMode) {
+        lockSelectField(requestService, lockedServiceIdInput ? lockedServiceIdInput.value : "");
+        lockSelectField(requestCity, lockedCityInput ? lockedCityInput.value : "");
+        lockSelectField(requestDistrict, lockedDistrictInput ? lockedDistrictInput.value : "");
       }
     }
   })();
