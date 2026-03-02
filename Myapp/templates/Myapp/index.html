@@ -348,7 +348,13 @@
             <div class="col-12">
               <label class="form-label">{{ request_form.details.label }}</label>
               {{ request_form.details }}
-              {% if request_form.details.help_text %}<p class="small text-muted mt-1 mb-0">{{ request_form.details.help_text }}</p>{% endif %}
+              <div class="request-details-meta">
+                {% if request_form.details.help_text %}<p class="small text-muted mt-1 mb-0">{{ request_form.details.help_text }}</p>{% endif %}
+                <span class="request-details-counter" data-request-details-counter></span>
+              </div>
+              <p class="small text-danger mt-1 mb-0" data-request-details-limit-error hidden>
+                Limit asildi. Lutfen metni kisaltin.
+              </p>
               {% for error in request_form.details.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
             </div>
             <div class="col-12">
@@ -898,9 +904,37 @@
         clearServiceLock();
         syncIndicator(null);
       }
-    }
-    setupPreferredProviderForm();
-  })();
+      }
+      setupPreferredProviderForm();
+
+      function setupRequestDetailsCounter() {
+        const requestForm = document.getElementById("request-form");
+        if (!requestForm) return;
+
+        const detailsField = requestForm.querySelector("textarea[name='details']");
+        const counter = requestForm.querySelector("[data-request-details-counter]");
+        const limitError = requestForm.querySelector("[data-request-details-limit-error]");
+        if (!detailsField || !counter) return;
+
+        const maxLength = Number(detailsField.getAttribute("maxlength") || 0);
+        if (!maxLength) return;
+
+        function syncCounter() {
+          const currentLength = String(detailsField.value || "").length;
+          const remaining = maxLength - currentLength;
+          counter.textContent = currentLength + " / " + maxLength + " karakter";
+          counter.classList.toggle("is-near-limit", remaining <= 120 && remaining >= 0);
+          counter.classList.toggle("is-over-limit", remaining < 0);
+          if (limitError) {
+            limitError.hidden = remaining >= 0;
+          }
+        }
+
+        detailsField.addEventListener("input", syncCounter);
+        syncCounter();
+      }
+      setupRequestDetailsCounter();
+    })();
 </script>
 <script>
   (function () {

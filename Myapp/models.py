@@ -70,7 +70,7 @@ class ServiceRequest(models.Model):
     city = models.CharField(max_length=80)
     district = models.CharField(max_length=80)
     service_type = models.ForeignKey(ServiceType, on_delete=models.PROTECT, related_name="requests")
-    details = models.TextField()
+    details = models.TextField(max_length=1000)
     created_ip = models.CharField(max_length=64, blank=True, default="", db_index=True)
     request_fingerprint = models.CharField(max_length=64, blank=True, default="", db_index=True)
     matched_provider = models.ForeignKey(

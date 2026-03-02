@@ -45,7 +45,7 @@ MIN_REVIEW_CHOICES = [
 ]
 
 
-SERVICE_REQUEST_DETAILS_MAX_LENGTH = 4000
+SERVICE_REQUEST_DETAILS_MAX_LENGTH = 1000
 
 
 def phone_widget_attrs():
@@ -213,6 +213,9 @@ class ServiceRequestForm(forms.ModelForm):
         self.fields["customer_phone"].help_text = PHONE_HELP_TEXT
         self.fields["details"].help_text = (
             f"En fazla {SERVICE_REQUEST_DETAILS_MAX_LENGTH} karakter girebilirsiniz."
+        )
+        self.fields["details"].error_messages["max_length"] = (
+            f"Detay alanı en fazla {SERVICE_REQUEST_DETAILS_MAX_LENGTH} karakter olabilir."
         )
         self._apply_preferred_provider_service_filter()
 

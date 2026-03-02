@@ -1086,6 +1086,22 @@ h3,
 
 .request-table tbody td {
   border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.request-table tbody td > * {
+  min-width: 0;
+}
+
+.request-action-note,
+.request-action-guide,
+.request-flow-hint,
+.request-detail-preview,
+.provider-flow-badge,
+.chat-bubble p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .request-complete-btn {
@@ -1196,6 +1212,45 @@ h3,
 .request-action-note-danger {
   color: #b91c1c;
   font-weight: 600;
+}
+
+.request-details-meta {
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.request-details-counter {
+  margin-top: 0.25rem;
+  margin-left: auto;
+  font-size: 0.74rem;
+  color: #64748b;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.request-details-counter.is-near-limit {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.request-details-counter.is-over-limit {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+@media (max-width: 575px) {
+  .request-details-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .request-details-counter {
+    margin-left: 0;
+    white-space: normal;
+  }
 }
 
 .request-action-guide {
@@ -1866,6 +1921,18 @@ textarea:focus {
 }
 
 [data-theme="dark"] .status-cancelled {
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .request-details-counter {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .request-details-counter.is-near-limit {
+  color: #facc15;
+}
+
+[data-theme="dark"] .request-details-counter.is-over-limit {
   color: #fca5a5;
 }
 

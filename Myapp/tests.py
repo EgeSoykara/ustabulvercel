@@ -184,6 +184,27 @@ class MarketplaceTests(TestCase):
         self.assertEqual(latest.status, "pending_provider")
         self.assertEqual(ProviderOffer.objects.filter(service_request=latest, status="pending").count(), 2)
 
+    def test_service_request_details_rejects_text_over_1000_chars(self):
+        customer = User.objects.create_user(username="detaylimittest", password="GucluSifre123!")
+        self.client.login(username="detaylimittest", password="GucluSifre123!")
+        response = self.client.post(
+            reverse("create_request"),
+            data={
+                "customer_name": "Detay Limit Test",
+                "customer_phone": "05000000000",
+                "service_type": self.service.id,
+                "city": "Lefkosa",
+                "district": "Ortakoy",
+                "details": "X" * 1001,
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        request_form = response.context["request_form"]
+        detail_errors = request_form.errors.get("details", [])
+        self.assertTrue(any("1000" in error for error in detail_errors))
+        self.assertEqual(ServiceRequest.objects.filter(customer=customer).count(), 0)
+
     def test_service_request_with_preferred_provider_creates_offer_for_only_selected_provider(self):
         customer = User.objects.create_user(username="ozelustamusteri", password="GucluSifre123!")
         self.client.login(username="ozelustamusteri", password="GucluSifre123!")
