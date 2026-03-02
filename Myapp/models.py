@@ -93,6 +93,13 @@ class ServiceRequest(models.Model):
         blank=True,
         related_name="service_requests",
     )
+    preferred_provider = models.ForeignKey(
+        Provider,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preferred_service_requests",
+    )
     matched_offer = models.ForeignKey(
         "ProviderOffer",
         on_delete=models.SET_NULL,

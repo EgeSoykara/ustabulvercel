@@ -59,6 +59,85 @@
         </article>
       {% endif %}
     </section>
+    {% if pending_selection_items %}
+      <section id="customer-selection-hub" class="customer-selection-hub mb-3" aria-label="Usta seçim merkezi">
+        <div class="customer-selection-head">
+          <div>
+            <h2 class="h6 mb-1"><i class="bi bi-person-check-fill me-2"></i>Usta Seçim Merkezi</h2>
+            <p class="small text-muted mb-0">
+              Müşteri onayı bekleyen talepleri tek noktadan yönet. Ustayı burada seç, tablo sade kalsın.
+            </p>
+          </div>
+          <span class="customer-selection-total">{{ pending_selection_items|length }} talep</span>
+        </div>
+        <div class="customer-selection-helper small text-muted">
+          Karşılaştırma puanı: usta puanı %70 + hız %30. Önerilen teklif en üstte görünür.
+        </div>
+        <div class="customer-selection-list mt-2">
+          {% for item in pending_selection_items %}
+            <details class="customer-selection-item" {% if forloop.first %}open{% endif %}>
+              <summary class="customer-selection-summary">
+                <span class="customer-selection-title">Talep {{ item.display_code }} · {{ item.service_type.name }}</span>
+                <span class="customer-selection-meta">{{ item.city }} / {{ item.district }}</span>
+                <span class="customer-selection-count">{{ item.accepted_offers|length }} teklif</span>
+              </summary>
+              <div class="customer-selection-body">
+                <div class="request-action-guide">
+                  <i class="bi bi-signpost-split me-1"></i>Sıradaki adım: {{ item.flow_next_action }}
+                </div>
+                {% if item.accepted_offers %}
+                  <div class="customer-selection-offers">
+                    {% for offer in item.accepted_offers %}
+                      <form
+                        method="post"
+                        action="{% url 'select_provider_offer' item.id offer.id %}"
+                        class="offer-select-form {% if item.recommended_offer_id == offer.id %}is-recommended{% endif %}"
+                        data-offer-select-form
+                      >
+                        {% csrf_token %}
+                        <div class="offer-select-main">
+                          <div class="offer-select-head">
+                            <div class="offer-provider-meta">
+                              <strong>{{ offer.provider.full_name }}</strong>
+                              <span class="offer-provider-rating">Usta puanı: {{ offer.provider.rating }}/5</span>
+                            </div>
+                            <div class="offer-score-breakdown">
+                              <span>Toplam {{ offer.comparison_score }}/100</span>
+                              <span>Puan {{ offer.rating_score }}</span>
+                              <span>Hız {{ offer.speed_score }}</span>
+                            </div>
+                          </div>
+                          {% if offer.quote_note %}
+                            <div class="offer-note">{{ offer.quote_note }}</div>
+                          {% endif %}
+                        </div>
+                        <div class="offer-select-actions">
+                          <a href="{% url 'provider_detail' offer.provider.id %}" class="btn btn-sm btn-outline-secondary">Profil</a>
+                          <button type="submit" class="btn btn-sm btn-main" data-offer-select-submit>
+                            <i class="bi bi-person-check me-1"></i>Bu ustayı seç
+                          </button>
+                          {% if item.recommended_offer_id == offer.id %}
+                            <span class="offer-badge">Önerilen</span>
+                          {% endif %}
+                        </div>
+                      </form>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="small text-muted">Henüz onaylı teklif yok.</span>
+                {% endif %}
+                <form method="post" action="{% url 'cancel_request' item.id %}" class="m-0 mt-2">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-x-circle me-1"></i>Talebi iptal et
+                  </button>
+                </form>
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
     {% if requests %}
       <div class="table-responsive">
         <table class="table request-table align-middle mb-0">
@@ -380,44 +459,16 @@
                       <div class="request-action-guide">
                         <i class="bi bi-signpost-split me-1"></i>Sıradaki adım: {{ item.flow_next_action }}
                       </div>
-                      {% if item.accepted_offers %}
-                        {% for offer in item.accepted_offers %}
-                          <form method="post" action="{% url 'select_provider_offer' item.id offer.id %}" class="offer-select-form">
-                            {% csrf_token %}
-                            <div class="offer-select-head">
-                              <strong>{{ offer.provider.full_name }}</strong>
-                              <a href="{% url 'provider_detail' offer.provider.id %}" class="offer-profile-link">Profili</a>
-                              {% if item.recommended_offer_id == offer.id %}
-                                <span class="offer-badge">Önerilen</span>
-                              {% endif %}
-                            </div>
-                            <div class="offer-score mb-2">
-                              <span>Karşılaştırma Puanı:</span>
-                              <strong>{{ offer.comparison_score }}/100</strong>
-                            </div>
-                            <div class="offer-score-breakdown mb-2">
-                              <span>Puan {{ offer.rating_score }}</span>
-                              <span>Hız {{ offer.speed_score }}</span>
-                            </div>
-                            <div class="small text-muted mb-2">
-                              Skor formülü: Usta puanı (70) + Hız (30). Hız, teklifin geliş sırasına göre hesaplanır.
-                            </div>
-                            <div class="small text-muted mb-2">Usta puani: {{ offer.provider.rating }}/5</div>
-                            {% if offer.quote_note %}
-                              <div class="small text-muted mb-2">{{ offer.quote_note }}</div>
-                            {% endif %}
-                            <button type="submit" class="btn btn-sm btn-main">
-                              <i class="bi bi-person-check me-1"></i>Bu Ustayı Seç
-                            </button>
-                          </form>
-                        {% endfor %}
-                      {% else %}
-                        <span class="small text-muted">Henüz onaylı teklif yok.</span>
-                      {% endif %}
+                      <div class="request-selection-shortcut">
+                        <span class="small text-muted">{{ item.accepted_offers|length }} teklif var. Seçimi Usta Seçim Merkezi'nden yap.</span>
+                        <a href="#customer-selection-hub" class="btn btn-sm btn-main">
+                          <i class="bi bi-list-check me-1"></i>Usta Seçim Merkezi
+                        </a>
+                      </div>
                       <form method="post" action="{% url 'cancel_request' item.id %}" class="m-0">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-sm btn-outline-danger">
-                          <i class="bi bi-x-circle me-1"></i>Talebi İptal Et
+                          <i class="bi bi-x-circle me-1"></i>Talebi iptal et
                         </button>
                       </form>
                     </div>
@@ -540,6 +591,38 @@
       openSelector: "[data-cancel-open]",
       boxSelector: "[data-cancel-confirm-box]",
       cancelSelector: "[data-cancel-cancel]",
+    });
+  })();
+</script>
+<script>
+  (function () {
+    const offerForms = document.querySelectorAll("form[data-offer-select-form]");
+    if (!offerForms.length) return;
+
+    let selectionLocked = false;
+
+    function lockSelection(selectedForm) {
+      offerForms.forEach(function (form) {
+        const submitButton = form.querySelector("[data-offer-select-submit]");
+        if (!submitButton) return;
+        submitButton.disabled = true;
+        if (form === selectedForm) {
+          submitButton.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Seçiliyor...';
+        } else {
+          submitButton.textContent = "Seçim kilitlendi";
+        }
+      });
+    }
+
+    offerForms.forEach(function (form) {
+      form.addEventListener("submit", function (event) {
+        if (selectionLocked) {
+          event.preventDefault();
+          return;
+        }
+        selectionLocked = true;
+        lockSelection(form);
+      });
     });
   })();
 </script>

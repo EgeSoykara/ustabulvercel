@@ -21,6 +21,7 @@
           data-viewer-role="{{ viewer_role }}"
           data-snapshot-url="{% url 'request_messages_snapshot' service_request.id %}"
           data-latest-id="{{ latest_message_id }}"
+          data-fallback-poll-ms="{{ fallback_poll_interval_ms }}"
         >
           {% for item in messages_list %}
             <article class="chat-bubble {% if item.sender_role == viewer_role %}mine{% else %}theirs{% endif %}" data-message-id="{{ item.id }}">
@@ -105,7 +106,7 @@
     let pollInFlight = false;
     let websocketHealthy = false;
 
-    const fallbackPollIntervalMs = 15000;
+    const fallbackPollIntervalMs = Number(thread.dataset.fallbackPollMs || 5000);
     const reconnectDelayMs = 3000;
 
     function buildSnapshotUrl(afterId) {

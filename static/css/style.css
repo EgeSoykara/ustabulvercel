@@ -1623,55 +1623,55 @@ body.live-sync-attention .panel-card {
 
 .offer-select-form {
   border: 1px solid var(--line);
-  border-radius: 11px;
-  padding: 9px;
+  border-radius: 12px;
+  padding: 10px;
   background: color-mix(in srgb, var(--panel-strong) 90%, transparent);
+  display: grid;
+  gap: 10px;
+}
+
+.offer-select-form.is-recommended {
+  border-color: rgba(14, 116, 144, 0.45);
+  box-shadow: 0 10px 20px rgba(14, 116, 144, 0.12);
+}
+
+.offer-select-main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
 }
 
 .offer-select-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 5px;
 }
 
-.offer-profile-link {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--brand-strong);
-  text-decoration: none;
+.offer-provider-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
-.offer-profile-link:hover {
-  text-decoration: underline;
+.offer-provider-meta strong {
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.offer-provider-rating {
+  font-size: 0.75rem;
+  color: var(--text-soft);
 }
 
 .offer-badge {
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   font-size: 0.66rem;
   font-weight: 800;
   color: #fff;
   background: linear-gradient(140deg, #0f766e, #0ea5e9);
-}
-
-.offer-price {
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: #0f766e;
-}
-
-.offer-score {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px dashed rgba(14, 116, 144, 0.28);
-  border-radius: 9px;
-  padding: 5px 8px;
-  font-size: 0.75rem;
 }
 
 .offer-score-breakdown {
@@ -1682,11 +1682,130 @@ body.live-sync-attention .panel-card {
 
 .offer-score-breakdown span {
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   font-size: 0.68rem;
   font-weight: 700;
   color: #155e75;
   background: rgba(14, 116, 144, 0.1);
+}
+
+.offer-note {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.offer-select-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.offer-select-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.customer-selection-hub {
+  border: 1px solid rgba(14, 116, 144, 0.24);
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(14, 116, 144, 0.07), rgba(14, 116, 144, 0.03));
+}
+
+.customer-selection-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.customer-selection-head h2 {
+  color: #0f172a;
+}
+
+.customer-selection-total {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #155e75;
+  background: rgba(14, 116, 144, 0.14);
+  white-space: nowrap;
+}
+
+.customer-selection-helper {
+  margin-top: 6px;
+}
+
+.customer-selection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.customer-selection-item {
+  border: 1px solid #dbe5ef;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+  padding: 10px 11px;
+}
+
+.customer-selection-item[open] {
+  border-color: rgba(14, 116, 144, 0.42);
+}
+
+.customer-selection-summary {
+  cursor: pointer;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.customer-selection-summary::-webkit-details-marker {
+  display: none;
+}
+
+.customer-selection-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.customer-selection-meta {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.customer-selection-count {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #155e75;
+  background: rgba(14, 116, 144, 0.12);
+}
+
+.customer-selection-body {
+  margin-top: 9px;
+  display: grid;
+  gap: 8px;
+}
+
+.customer-selection-offers {
+  display: grid;
+  gap: 8px;
+}
+
+.request-selection-shortcut {
+  display: grid;
+  gap: 7px;
 }
 
 .appointment-create-form {
@@ -2084,6 +2203,20 @@ textarea:focus {
   background: rgba(15, 23, 42, 0.72);
 }
 
+[data-theme="dark"] .offer-select-form.is-recommended {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 10px 24px rgba(2, 132, 199, 0.25);
+}
+
+[data-theme="dark"] .offer-provider-rating {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .offer-note {
+  color: #dbeafe;
+  background: rgba(30, 41, 59, 0.82);
+}
+
 [data-theme="dark"] .chat-bubble.mine {
   background: rgba(34, 211, 238, 0.14);
   border-color: rgba(34, 211, 238, 0.36);
@@ -2098,21 +2231,41 @@ textarea:focus {
   background: linear-gradient(140deg, #0891b2, #2563eb);
 }
 
-[data-theme="dark"] .offer-price {
-  color: #5eead4;
-}
-
-[data-theme="dark"] .offer-score {
-  border-color: rgba(34, 211, 238, 0.35);
-}
-
 [data-theme="dark"] .offer-score-breakdown span {
   color: #a5f3fc;
   background: rgba(34, 211, 238, 0.16);
 }
 
-[data-theme="dark"] .offer-profile-link {
-  color: #7dd3fc;
+[data-theme="dark"] .customer-selection-hub {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: rgba(14, 116, 144, 0.2);
+}
+
+[data-theme="dark"] .customer-selection-total {
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, 0.22);
+}
+
+[data-theme="dark"] .customer-selection-item {
+  border-color: rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.82);
+}
+
+[data-theme="dark"] .customer-selection-item[open] {
+  border-color: rgba(56, 189, 248, 0.48);
+}
+
+[data-theme="dark"] .customer-selection-title {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .customer-selection-meta {
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .customer-selection-count {
+  color: #a5f3fc;
+  background: rgba(34, 211, 238, 0.18);
 }
 
 [data-theme="dark"] .live-sync-toast {
@@ -3145,6 +3298,42 @@ body {
 
   .my-requests-section .request-mobile-toggle:active {
     transform: translateY(1px);
+  }
+
+  .customer-selection-item {
+    padding: 0.72rem 0.75rem;
+  }
+
+  .customer-selection-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .customer-selection-summary {
+    gap: 3px;
+  }
+
+  .offer-score-breakdown span {
+    font-size: 0.66rem;
+  }
+
+  .offer-select-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .offer-select-actions .btn {
+    width: 100%;
+  }
+
+  .offer-select-actions .offer-badge {
+    justify-self: flex-start;
+  }
+
+  .request-selection-shortcut .btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .my-requests-section .request-row-card:not(.mobile-expanded) td[data-label="Randevu"],

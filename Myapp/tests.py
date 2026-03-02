@@ -243,9 +243,10 @@ class MarketplaceTests(TestCase):
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Oncelikli olarak Ali Usta ustasina iletildi")
+        self.assertContains(response, "Öncelikli olarak Ali Usta ustasına iletildi")
         created_request = ServiceRequest.objects.latest("created_at")
         pending_offers = ProviderOffer.objects.filter(service_request=created_request, status="pending")
+        self.assertEqual(created_request.preferred_provider_id, self.provider_ali.id)
         self.assertEqual(pending_offers.count(), 1)
         self.assertEqual(pending_offers.first().provider_id, self.provider_ali.id)
 
@@ -551,7 +552,7 @@ class MarketplaceTests(TestCase):
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Mahallendeki En")
+        self.assertContains(response, "Mahallendeki en iyi")
         self.assertNotIn("phone_verify", self.client.session)
 
     def test_provider_can_signup(self):
@@ -1564,6 +1565,84 @@ class MarketplaceTests(TestCase):
         self.assertEqual(offer.quote_note, "Ayni gun gelebilirim.")
         self.assertEqual(sibling_offer.status, "pending")
 
+    def test_provider_accepts_preferred_request_and_auto_matches(self):
+        customer = User.objects.create_user(username="ozelmusteri_panel", password="GucluSifre123!")
+        self.client.login(username="ozelmusteri_panel", password="GucluSifre123!")
+        self.client.post(
+            reverse("create_request"),
+            data={
+                "customer_name": "Ozel Panel Musteri",
+                "customer_phone": "05000000088",
+                "service_type": self.service.id,
+                "city": "Lefkosa",
+                "district": "Ortakoy",
+                "details": "Ozel usta kabulunde otomatik eslesme testi",
+                "preferred_provider_id": self.provider_ali.id,
+                "preferred_provider_locked_service_id": self.service.id,
+                "preferred_provider_locked_city": "Lefkosa",
+                "preferred_provider_locked_district": "Ortakoy",
+            },
+            follow=True,
+        )
+
+        service_request = ServiceRequest.objects.latest("created_at")
+        self.assertEqual(service_request.preferred_provider_id, self.provider_ali.id)
+        offer = ProviderOffer.objects.get(service_request=service_request, provider=self.provider_ali)
+        self.client.logout()
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        self.client.post(
+            reverse("provider_accept_offer", args=[offer.id]),
+            data={"quote_note": "Uygunum, hemen gelebilirim."},
+            follow=True,
+        )
+
+        service_request.refresh_from_db()
+        offer.refresh_from_db()
+        self.assertEqual(service_request.status, "matched")
+        self.assertEqual(service_request.matched_provider_id, self.provider_ali.id)
+        self.assertEqual(service_request.matched_offer_id, offer.id)
+        self.assertIsNotNone(service_request.matched_at)
+        self.assertEqual(offer.status, "accepted")
+
+    def test_preferred_provider_reject_clears_preference_and_falls_back_to_general_pool(self):
+        customer = User.objects.create_user(username="ozelredmusteri", password="GucluSifre123!")
+        self.client.login(username="ozelredmusteri", password="GucluSifre123!")
+        self.client.post(
+            reverse("create_request"),
+            data={
+                "customer_name": "Ozel Red Musteri",
+                "customer_phone": "05000000089",
+                "service_type": self.service.id,
+                "city": "Lefkosa",
+                "district": "Ortakoy",
+                "details": "Ozel usta reddinde fallback testi",
+                "preferred_provider_id": self.provider_ali.id,
+                "preferred_provider_locked_service_id": self.service.id,
+                "preferred_provider_locked_city": "Lefkosa",
+                "preferred_provider_locked_district": "Ortakoy",
+            },
+            follow=True,
+        )
+
+        service_request = ServiceRequest.objects.latest("created_at")
+        offer = ProviderOffer.objects.get(service_request=service_request, provider=self.provider_ali)
+        self.client.logout()
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        self.client.post(reverse("provider_reject_offer", args=[offer.id]), follow=True)
+
+        service_request.refresh_from_db()
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, "rejected")
+        self.assertIsNone(service_request.preferred_provider)
+        self.assertEqual(service_request.status, "pending_provider")
+        self.assertTrue(
+            ProviderOffer.objects.filter(
+                service_request=service_request,
+                provider=self.provider_hasan,
+                status="pending",
+            ).exists()
+        )
+
     def test_offer_is_auto_expired_when_time_passes(self):
         request_item = ServiceRequest.objects.create(
             customer_name="Timeout Musteri",
@@ -1737,6 +1816,51 @@ class MarketplaceTests(TestCase):
         self.assertIsNotNone(service_request.matched_at)
         self.assertEqual(offer_2.status, "accepted")
         self.assertEqual(offer_1.status, "expired")
+
+    def test_customer_cannot_select_second_provider_after_match(self):
+        customer = User.objects.create_user(username="teklifkilit", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Teklif Kilit Musteri",
+            customer_phone="05001112223",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Ilk secimden sonra digeri engellenmeli",
+            customer=customer,
+            status="pending_customer",
+        )
+        offer_1 = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="LOCK111111",
+            sequence=1,
+            status="accepted",
+        )
+        offer_2 = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_hasan,
+            token="LOCK222222",
+            sequence=2,
+            status="accepted",
+        )
+
+        self.client.login(username="teklifkilit", password="GucluSifre123!")
+        self.client.post(reverse("select_provider_offer", args=[service_request.id, offer_1.id]), follow=True)
+        second_response = self.client.post(
+            reverse("select_provider_offer", args=[service_request.id, offer_2.id]),
+            follow=True,
+        )
+
+        service_request.refresh_from_db()
+        offer_1.refresh_from_db()
+        offer_2.refresh_from_db()
+
+        self.assertContains(second_response, "usta seçimi artık yapılamaz")
+        self.assertEqual(service_request.status, "matched")
+        self.assertEqual(service_request.matched_offer, offer_1)
+        self.assertEqual(service_request.matched_provider, self.provider_ali)
+        self.assertEqual(offer_1.status, "accepted")
+        self.assertEqual(offer_2.status, "expired")
 
     def test_customer_cannot_select_offer_from_unverified_provider(self):
         customer = User.objects.create_user(username="onaysizsecim", password="GucluSifre123!")

@@ -442,6 +442,10 @@ def get_nav_stream_reopen_min_seconds():
     return max(1, int(getattr(settings, "NAV_STREAM_REOPEN_MIN_SECONDS", 2)))
 
 
+def get_request_messages_fallback_poll_interval_seconds():
+    return max(3, int(getattr(settings, "REQUEST_MESSAGES_FALLBACK_POLL_INTERVAL_SECONDS", 5)))
+
+
 def get_lifecycle_web_refresh_interval_seconds():
     return max(5, int(getattr(settings, "MARKETPLACE_LIFECYCLE_WEB_REFRESH_INTERVAL_SECONDS", 20)))
 
@@ -1307,6 +1311,16 @@ def build_customer_flow_state(service_request, appointment, *, has_accepted_offe
     status = service_request.status
     calendar_enabled = is_calendar_enabled()
 
+    if status in {"new", "pending_provider"} and service_request.preferred_provider_id:
+        flow.update(
+            {
+                "title": "Seçtiğiniz usta yanıtı bekleniyor",
+                "hint": "Talebiniz doğrudan seçtiğiniz ustaya iletildi.",
+                "next_action": "Usta onay verirse otomatik eşleşeceksiniz.",
+                "tone": "waiting",
+            }
+        )
+
     if status == "pending_customer":
         flow.update(
             {
@@ -1571,13 +1585,14 @@ def dispatch_preferred_provider_offer(
         reminder_sent_at=None,
     )
 
+    service_request.preferred_provider = provider
     service_request.matched_provider = None
     service_request.matched_offer = None
     service_request.matched_at = None
     if not transition_service_request_status(
         service_request,
         "pending_provider",
-        extra_update_fields=["matched_provider", "matched_offer", "matched_at"],
+        extra_update_fields=["preferred_provider", "matched_provider", "matched_offer", "matched_at"],
         actor_user=actor_user,
         actor_role=actor_role,
         source=source,
@@ -1588,6 +1603,20 @@ def dispatch_preferred_provider_offer(
 
 
 def dispatch_next_provider_offer(service_request, actor_user=None, actor_role="system", source="system", note=""):
+    clear_preferred_provider = False
+    if service_request.preferred_provider_id:
+        has_pending_for_preferred = service_request.provider_offers.filter(
+            provider_id=service_request.preferred_provider_id,
+            status="pending",
+        ).exists()
+        if not has_pending_for_preferred:
+            service_request.preferred_provider = None
+            clear_preferred_provider = True
+
+    reset_fields = ["matched_provider", "matched_offer", "matched_at"]
+    if clear_preferred_provider:
+        reset_fields.append("preferred_provider")
+
     groups = build_provider_candidate_groups(service_request)
     if not groups:
         service_request.matched_provider = None
@@ -1596,7 +1625,7 @@ def dispatch_next_provider_offer(service_request, actor_user=None, actor_role="s
         if not transition_service_request_status(
             service_request,
             "new",
-            extra_update_fields=["matched_provider", "matched_offer", "matched_at"],
+            extra_update_fields=reset_fields,
             actor_user=actor_user,
             actor_role=actor_role,
             source=source,
@@ -1639,7 +1668,7 @@ def dispatch_next_provider_offer(service_request, actor_user=None, actor_role="s
         if not transition_service_request_status(
             service_request,
             "pending_provider",
-            extra_update_fields=["matched_provider", "matched_offer", "matched_at"],
+            extra_update_fields=reset_fields,
             actor_user=actor_user,
             actor_role=actor_role,
             source=source,
@@ -1654,7 +1683,7 @@ def dispatch_next_provider_offer(service_request, actor_user=None, actor_role="s
     if not transition_service_request_status(
         service_request,
         "new",
-        extra_update_fields=["matched_provider", "matched_offer", "matched_at"],
+        extra_update_fields=reset_fields,
         actor_user=actor_user,
         actor_role=actor_role,
         source=source,
@@ -1914,7 +1943,9 @@ def create_request(request):
     if abuse_response:
         return abuse_response
 
+    preferred_provider = request_form.cleaned_data.get("preferred_provider")
     service_request = request_form.save(commit=False)
+    service_request.preferred_provider = preferred_provider
     if request.user.is_authenticated:
         service_request.customer = request.user
     service_request.created_ip = get_client_ip(request)[:64]
@@ -1938,7 +1969,6 @@ def create_request(request):
         customer_profile.district = service_request.district
         customer_profile.save(update_fields=["phone", "city", "district"])
 
-    preferred_provider = request_form.cleaned_data.get("preferred_provider")
     if preferred_provider:
         dispatch_result = dispatch_preferred_provider_offer(
             service_request,
@@ -2411,6 +2441,7 @@ def request_messages(request, request_id):
             "form": form,
             "back_url": back_url,
             "quick_reply_options": get_message_quick_replies(viewer_role),
+            "fallback_poll_interval_ms": get_request_messages_fallback_poll_interval_seconds() * 1000,
         },
     )
 
@@ -2680,6 +2711,7 @@ def my_requests(request):
         )
     unread_message_map = build_unread_message_map(request_ids, "customer")
     now = timezone.now()
+    pending_selection_items = []
     for item in requests:
         item.rating_entry = rating_map.get(item.id)
         item.appointment_entry = appointment_map.get(item.id)
@@ -2754,6 +2786,8 @@ def my_requests(request):
         item.flow_hint = flow_state["hint"]
         item.flow_next_action = flow_state["next_action"]
         item.flow_tone = flow_state["tone"]
+        if item.status == "pending_customer":
+            pending_selection_items.append(item)
     cancelled_count = requests_qs.filter(status="cancelled").count()
     all_request_ids = list(requests_qs.values_list("id", flat=True))
     waiting_provider_appointment_count = 0
@@ -2779,6 +2813,7 @@ def my_requests(request):
             "customer_requests_signature": customer_snapshot["signature"],
             "customer_snapshot": customer_snapshot,
             "customer_flow_summary": customer_flow_summary,
+            "pending_selection_items": pending_selection_items,
             "appointment_min_lead_minutes": get_appointment_min_lead_minutes() if calendar_enabled else 0,
             "calendar_enabled": calendar_enabled,
         },
@@ -3437,7 +3472,11 @@ def select_provider_offer(request, request_id, offer_id):
 
     actor_role = infer_actor_role(request.user)
     service_request = get_object_or_404(ServiceRequest, id=request_id, customer=request.user)
-    if service_request.status not in {"pending_provider", "pending_customer"} or service_request.matched_provider is not None:
+    if (
+        service_request.status not in {"pending_provider", "pending_customer"}
+        or service_request.matched_provider is not None
+        or service_request.matched_offer is not None
+    ):
         messages.warning(request, "Bu talep için usta seçimi artık yapılamaz.")
         return redirect("my_requests")
 
@@ -3446,7 +3485,11 @@ def select_provider_offer(request, request_id, offer_id):
         if not service_request:
             messages.warning(request, "Talep bulunamadı.")
             return redirect("my_requests")
-        if service_request.status not in {"pending_provider", "pending_customer"} or service_request.matched_provider_id is not None:
+        if (
+            service_request.status not in {"pending_provider", "pending_customer"}
+            or service_request.matched_provider_id is not None
+            or service_request.matched_offer_id is not None
+        ):
             messages.warning(request, "Bu talep zaten eşleştirilmiş.")
             return redirect("my_requests")
 
@@ -3978,21 +4021,49 @@ def provider_accept_offer(request, offer_id):
         offer.quote_note = quote_note
         offer.save(update_fields=["status", "responded_at", "quote_note"])
 
-        if not transition_service_request_status(
-            service_request,
-            "pending_customer",
-            actor_user=request.user,
-            actor_role=actor_role,
-            source="user",
-            note="Usta teklif verdi, müşteri seçimi bekleniyor",
-        ):
-            messages.warning(request, "Talep durumu teklif sonrası güncellenemedi.")
-            return redirect("provider_requests")
+        is_preferred_request_match = bool(
+            service_request.preferred_provider_id and service_request.preferred_provider_id == offer.provider_id
+        )
+        if is_preferred_request_match:
+            ProviderOffer.objects.filter(service_request=service_request).exclude(id=offer.id).filter(
+                status__in=["pending", "accepted"]
+            ).update(status="expired", responded_at=now)
+            service_request.matched_provider = provider
+            service_request.matched_offer = offer
+            service_request.matched_at = now
+            if not transition_service_request_status(
+                service_request,
+                "matched",
+                extra_update_fields=["matched_provider", "matched_offer", "matched_at"],
+                actor_user=request.user,
+                actor_role=actor_role,
+                source="user",
+                note="Özel usta talebi kabul edildi ve doğrudan eşleşti",
+            ):
+                messages.warning(request, "Talep durumu eşleşme için güncellenemedi.")
+                return redirect("provider_requests")
+        else:
+            if not transition_service_request_status(
+                service_request,
+                "pending_customer",
+                actor_user=request.user,
+                actor_role=actor_role,
+                source="user",
+                note="Usta teklif verdi, müşteri seçimi bekleniyor",
+            ):
+                messages.warning(request, "Talep durumu teklif sonrası güncellenemedi.")
+                return redirect("provider_requests")
 
-    messages.success(
-        request,
-        f"Talep {get_request_display_code(service_request)} iş teklifiniz müşteriye gönderildi.",
-    )
+    if service_request.preferred_provider_id == provider.id and service_request.status == "matched":
+        messages.success(
+            request,
+            f"Talep {get_request_display_code(service_request)} için müşteriyle doğrudan eşleştiniz.",
+        )
+    else:
+        messages.success(
+            request,
+            f"Talep {get_request_display_code(service_request)} iş teklifiniz müşteriye gönderildi.",
+        )
     return redirect("provider_requests")
 
 
@@ -4030,6 +4101,10 @@ def provider_reject_offer(request, offer_id):
     offer.status = "rejected"
     offer.responded_at = now
     offer.save(update_fields=["status", "responded_at"])
+
+    if service_request.preferred_provider_id and service_request.preferred_provider_id == offer.provider_id:
+        service_request.preferred_provider = None
+        service_request.save(update_fields=["preferred_provider"])
 
     has_accepted_offer = service_request.provider_offers.filter(status="accepted").exists()
     if service_request.provider_offers.filter(status="pending").exists():

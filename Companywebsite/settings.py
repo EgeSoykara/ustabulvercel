@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import hashlib
 import importlib.util
 import os
 import sys
@@ -63,6 +64,19 @@ def env_csv(name, default=""):
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-local-dev-key-change-this-before-production",
+)
+
+
+def build_mobile_jwt_signing_key(secret_key):
+    raw_secret = str(secret_key or "")
+    if len(raw_secret.encode("utf-8")) >= 32:
+        return raw_secret
+    # Keep deterministic fallback while enforcing minimum recommended entropy length for HS256.
+    return hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+
+
+MOBILE_JWT_SIGNING_KEY = (
+    os.getenv("MOBILE_JWT_SIGNING_KEY", "").strip() or build_mobile_jwt_signing_key(SECRET_KEY)
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -314,6 +328,9 @@ LIFECYCLE_LOCK_TTL_SECONDS = int(os.getenv("LIFECYCLE_LOCK_TTL_SECONDS", "120"))
 NAV_STREAM_INTERVAL_SECONDS = int(os.getenv("NAV_STREAM_INTERVAL_SECONDS", "8"))
 NAV_STREAM_MAX_DURATION_SECONDS = int(os.getenv("NAV_STREAM_MAX_DURATION_SECONDS", "55"))
 NAV_STREAM_REOPEN_MIN_SECONDS = int(os.getenv("NAV_STREAM_REOPEN_MIN_SECONDS", "2"))
+REQUEST_MESSAGES_FALLBACK_POLL_INTERVAL_SECONDS = int(
+    os.getenv("REQUEST_MESSAGES_FALLBACK_POLL_INTERVAL_SECONDS", "5")
+)
 NOTIFICATION_RETENTION_DAYS = int(os.getenv("NOTIFICATION_RETENTION_DAYS", "60"))
 NOTIFICATION_UNREAD_CACHE_SECONDS = int(os.getenv("NOTIFICATION_UNREAD_CACHE_SECONDS", "6"))
 CUSTOMER_SNAPSHOT_CACHE_SECONDS = int(os.getenv("CUSTOMER_SNAPSHOT_CACHE_SECONDS", "3"))
@@ -351,6 +368,6 @@ SIMPLE_JWT = {
     ),
     "AUTH_HEADER_TYPES": ("Bearer",),
     "ALGORITHM": "HS256",
-    "SIGNING_KEY": SECRET_KEY,
+    "SIGNING_KEY": MOBILE_JWT_SIGNING_KEY,
     "UPDATE_LAST_LOGIN": True,
 }
