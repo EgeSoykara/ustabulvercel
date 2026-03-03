@@ -635,7 +635,7 @@ def reject_create_request_abuse(request, redirect_name, *, cleaned_data):
                 wait_seconds = max(1, min_interval_seconds - elapsed_seconds)
                 messages.warning(
                     request,
-                    f"Yeni talep acmadan once {wait_seconds} saniye bekleyin.",
+                    f"Yeni talep açmadan önce {wait_seconds} saniye bekleyin.",
                 )
                 return redirect(redirect_name)
 
