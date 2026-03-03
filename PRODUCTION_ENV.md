@@ -31,6 +31,8 @@ SECURE_HSTS_SECONDS=31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS=1
 SECURE_HSTS_PRELOAD=1
 DATABASE_URL=<render-postgres-connection-string>
+MOBILE_LOGIN_RATE_LIMIT=20/minute
+LIFECYCLE_HEALTH_TOKEN=<long-random-token>
 LIFECYCLE_LOCK_TTL_SECONDS=120
 APPOINTMENT_SLOT_BUFFER_MINUTES=45
 ```
@@ -40,7 +42,7 @@ APPOINTMENT_SLOT_BUFFER_MINUTES=45
 Worker'in surekli calistigini asagidaki endpoint ile izle:
 
 ```bash
-GET /health/lifecycle/
+GET /health/lifecycle/ (header: X-Health-Token: <LIFECYCLE_HEALTH_TOKEN>)
 ```
 
 - `200`: healthy

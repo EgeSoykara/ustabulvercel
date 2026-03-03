@@ -1281,7 +1281,7 @@ def build_customer_requests_signature(user):
         "unread": unread_rows,
     }
     encoded = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
-    return hashlib.sha1(encoded).hexdigest()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def build_provider_panel_signature(provider):
@@ -1323,7 +1323,7 @@ def build_provider_panel_signature(provider):
         "unread": unread_rows,
     }
     encoded = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
-    return hashlib.sha1(encoded).hexdigest()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def build_customer_snapshot_payload(user):

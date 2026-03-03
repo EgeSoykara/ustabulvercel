@@ -61,9 +61,10 @@ def env_csv(name, default=""):
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
+DEFAULT_INSECURE_SECRET_KEY = "django-insecure-local-dev-key-change-this-before-production"
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
-    "django-insecure-local-dev-key-change-this-before-production",
+    DEFAULT_INSECURE_SECRET_KEY,
 )
 
 
@@ -86,6 +87,17 @@ IS_TEST = "test" in sys.argv
 
 default_debug = not IS_PRODUCTION
 DEBUG = env_bool("DJANGO_DEBUG", default_debug)
+if IS_PRODUCTION:
+    insecure_secret_key = (
+        not SECRET_KEY
+        or SECRET_KEY == DEFAULT_INSECURE_SECRET_KEY
+        or SECRET_KEY.startswith("django-insecure-")
+        or len(SECRET_KEY) < 32
+    )
+    if insecure_secret_key:
+        raise RuntimeError(
+            "Production icin guclu bir DJANGO_SECRET_KEY gerekli (en az 32 karakter, 'django-insecure-' olmamali)."
+        )
 
 default_allowed_hosts = ["127.0.0.1", "localhost", "testserver"]
 if DEBUG:
@@ -168,6 +180,20 @@ ASGI_APPLICATION = 'Companywebsite.asgi.application'
 REDIS_URL = os.getenv("REDIS_URL", "").strip()
 if REDIS_URL and len(REDIS_URL) >= 2 and REDIS_URL[0] == REDIS_URL[-1] and REDIS_URL[0] in {"'", '"'}:
     REDIS_URL = REDIS_URL[1:-1].strip()
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "ustabul-local-cache",
+        }
+    }
 HAS_CHANNELS_REDIS = importlib.util.find_spec("channels_redis") is not None
 if REDIS_URL and HAS_CHANNELS_REDIS:
     CHANNEL_LAYERS = {
@@ -220,6 +246,8 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+if IS_PRODUCTION and not DATABASE_URL:
+    raise RuntimeError("Production ortaminda DATABASE_URL zorunludur; sqlite fallback devre disi.")
 
 
 # Password validation
@@ -311,6 +339,7 @@ APPOINTMENT_NO_SHOW_GRACE_MINUTES = int(os.getenv("APPOINTMENT_NO_SHOW_GRACE_MIN
 # Reliability
 LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "15"))
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "60"))
+MOBILE_LOGIN_RATE_LIMIT = (os.getenv("MOBILE_LOGIN_RATE_LIMIT", "20/minute") or "20/minute").strip()
 ACTION_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("ACTION_RATE_LIMIT_MAX_ATTEMPTS", "40"))
 ACTION_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("ACTION_RATE_LIMIT_WINDOW_SECONDS", "60"))
 CREATE_REQUEST_RATE_LIMIT_MAX_ATTEMPTS = int(os.getenv("CREATE_REQUEST_RATE_LIMIT_MAX_ATTEMPTS", "8"))
@@ -357,6 +386,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "mobile_login": MOBILE_LOGIN_RATE_LIMIT,
+    },
 }
 
 SIMPLE_JWT = {
