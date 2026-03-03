@@ -35,10 +35,10 @@ jobs:
 
       - name: Build iOS release (unsigned)
         env:
-          MOBILE_API_BASE_URL: ${{ secrets.MOBILE_API_BASE_URL }}
+          MOBILE_SITE_URL: ${{ secrets.MOBILE_SITE_URL }}
         run: |
-          API_URL="${MOBILE_API_BASE_URL:-https://example.com}"
-          flutter build ios --release --no-codesign --dart-define=API_BASE_URL=$API_URL
+          SITE_URL="${MOBILE_SITE_URL:-https://example.com}"
+          flutter build ios --release --no-codesign --dart-define=SITE_URL=$SITE_URL
 
       - name: Zip Runner.app
         run: |

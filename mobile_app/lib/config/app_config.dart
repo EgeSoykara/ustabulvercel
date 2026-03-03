@@ -4,7 +4,9 @@ class AppConfig {
   static const _siteUrlFromEnv = String.fromEnvironment('SITE_URL', defaultValue: '');
   static const _apiBaseUrlFromEnv = String.fromEnvironment('API_BASE_URL', defaultValue: '');
 
-  // Override with: flutter run --dart-define=SITE_URL=https://your-domain.com
+  // Override with:
+  // flutter run --dart-define=SITE_URL=https://your-domain.com
+  // Legacy fallback: --dart-define=API_BASE_URL=https://your-domain.com
   static String get siteUrl {
     if (_siteUrlFromEnv.isNotEmpty) {
       return _siteUrlFromEnv;
@@ -26,6 +28,10 @@ class AppConfig {
     }
   }
 
-  // Backward compatible alias for older code paths.
-  static String get apiBaseUrl => siteUrl;
+  static String get apiBaseUrl {
+    if (_apiBaseUrlFromEnv.isNotEmpty) {
+      return _apiBaseUrlFromEnv;
+    }
+    return siteUrl;
+  }
 }

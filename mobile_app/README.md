@@ -1,13 +1,14 @@
 # UstaBul Mobile (iOS + Android)
 
 Bu klasor artik native `android/` ve `ios/` proje dosyalari ile hazirdir.
+Bu uygulama bir `WebView shell` olarak calisir ve website'i mobil uygulama icinde acar.
 
 ## Hemen calistir
 
 ```bash
 cd mobile_app
 flutter pub get
-flutter run --dart-define=API_BASE_URL=https://your-domain.com
+flutter run --dart-define=SITE_URL=https://your-domain.com
 ```
 
 Yerelde Android emulator icin varsayilan backend adresi:
@@ -19,13 +20,13 @@ Yerelde Android emulator icin varsayilan backend adresi:
 Android AAB:
 
 ```bash
-flutter build appbundle --release --dart-define=API_BASE_URL=https://your-domain.com
+flutter build appbundle --release --dart-define=SITE_URL=https://your-domain.com
 ```
 
 iOS release (unsigned, macOS):
 
 ```bash
-flutter build ios --release --no-codesign --dart-define=API_BASE_URL=https://your-domain.com
+flutter build ios --release --no-codesign --dart-define=SITE_URL=https://your-domain.com
 ```
 
 ## Android signing
@@ -60,7 +61,7 @@ Repo icine iki workflow eklendi:
 
 Opsiyonel secret'lar:
 
-- `MOBILE_API_BASE_URL`
+- `MOBILE_SITE_URL`
 - `ANDROID_GOOGLE_SERVICES_JSON_BASE64`
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEY_PROPERTIES_BASE64`
@@ -68,13 +69,8 @@ Opsiyonel secret'lar:
 
 `mobile-v*` tag'i ile push yapinca build artifact uretilir.
 
-## Kullandigi mobil API endpointleri
+## Cihaz ici davranis
 
-- `POST /mobile/api/v1/auth/login/`
-- `POST /mobile/api/v1/auth/refresh/`
-- `GET /mobile/api/v1/me/`
-- `GET /mobile/api/v1/customer/requests/`
-- `GET /mobile/api/v1/provider/dashboard/`
-- `GET /mobile/api/v1/requests/<id>/messages/`
-- `POST /mobile/api/v1/requests/<id>/messages/`
-- `POST /mobile/api/v1/devices/register/`
+- Uygulama acilisinda `SITE_URL` adresi yuklenir.
+- Back tusu WebView gecmisinde geri gider.
+- Site icindeki giris/oturum akislari aynen web ile calisir.

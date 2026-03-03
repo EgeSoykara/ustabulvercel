@@ -106,4 +106,10 @@ class SessionController extends ChangeNotifier {
       return refreshed;
     }
   }
+
+  @override
+  void dispose() {
+    _pushService.dispose();
+    super.dispose();
+  }
 }

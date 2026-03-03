@@ -51,10 +51,10 @@ jobs:
 
       - name: Build Android App Bundle
         env:
-          MOBILE_API_BASE_URL: ${{ secrets.MOBILE_API_BASE_URL }}
+          MOBILE_SITE_URL: ${{ secrets.MOBILE_SITE_URL }}
         run: |
-          API_URL="${MOBILE_API_BASE_URL:-https://example.com}"
-          flutter build appbundle --release --dart-define=API_BASE_URL=$API_URL
+          SITE_URL="${MOBILE_SITE_URL:-https://example.com}"
+          flutter build appbundle --release --dart-define=SITE_URL=$SITE_URL
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
