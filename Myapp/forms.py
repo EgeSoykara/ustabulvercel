@@ -785,13 +785,11 @@ class ProviderRatingForm(forms.ModelForm):
 class AppointmentCreateForm(forms.ModelForm):
     QUICK_TIME_CHOICES = (
         ("", "Detayli tarih sec"),
-        ("now", "Simdi"),
         ("30m", "30 dakika sonra"),
         ("1h", "1 saat sonra"),
         ("2h", "2 saat sonra"),
     )
     QUICK_TIME_MINUTES = {
-        "now": 1,
         "30m": 30,
         "1h": 60,
         "2h": 120,
@@ -912,4 +910,3 @@ class ServiceMessageForm(forms.ModelForm):
         if len(body) < 2:
             raise ValidationError("Mesaj en az 2 karakter olmalı.")
         return body
-

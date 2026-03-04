@@ -137,10 +137,9 @@
                       {% csrf_token %}
                       <div class="appointment-quick-actions d-flex align-items-center gap-2 flex-wrap">
                         <span class="small text-muted">Hızlı Saat:</span>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="0">Şimdi</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="30">+30 dk</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="60">+60 dk</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="120">+120 dk</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="30">30 dk</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="60">1 saat</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="120">2 saat</button>
                       </div>
                       <input type="datetime-local" name="scheduled_for" class="form-control form-control-sm" required>
                       <input type="text" name="customer_note" class="form-control form-control-sm" maxlength="100" placeholder="Randevu notu (opsiyonel)">
