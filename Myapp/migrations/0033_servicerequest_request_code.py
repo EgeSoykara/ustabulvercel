@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="servicerequest",
             name="request_code",
-            field=models.CharField(blank=True, db_index=True, editable=False, max_length=24, null=True),
+            field=models.CharField(blank=True, editable=False, max_length=24, null=True),
         ),
         migrations.RunPython(populate_request_codes, noop_reverse),
         migrations.AlterField(
@@ -60,4 +60,3 @@ class Migration(migrations.Migration):
             field=models.CharField(db_index=True, editable=False, max_length=24, unique=True),
         ),
     ]
-
