@@ -38,7 +38,7 @@ LIFECYCLE_HEALTH_TOKEN=<long-random-token>
 LIFECYCLE_LOCK_TTL_SECONDS=120
 APPOINTMENT_SLOT_BUFFER_MINUTES=45
 AUTO_SUPERUSER_ENABLED=1
-AUTO_SUPERUSER_USERNAME=ustabul-admin
+AUTO_SUPERUSER_USERNAME=egesoykara
 AUTO_SUPERUSER_PASSWORD=<strong-admin-password>
 AUTO_SUPERUSER_SYNC_PASSWORD=1
 ```
@@ -48,7 +48,7 @@ AUTO_SUPERUSER_SYNC_PASSWORD=1
 Render blueprint artik `python scripts/ensure_superuser.py` komutunu web deploy sirasinda calistirir.
 
 - Admin URL: `/admin/`
-- Varsayilan kullanici adi: `ustabul-admin`
+- Varsayilan kullanici adi: `egesoykara`
 - Sifre: Render dashboard icindeki `AUTO_SUPERUSER_PASSWORD`
 
 `AUTO_SUPERUSER_SYNC_PASSWORD=1` oldugu surece deploy sonrasi sifre tekrar env degerine cekilir. Admin panelinden sifreyi kalici olarak degistirmek istersen bu degiskeni `0` yap.

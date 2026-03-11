@@ -30,7 +30,7 @@ services:
       - key: AUTO_SUPERUSER_ENABLED
         value: "1"
       - key: AUTO_SUPERUSER_USERNAME
-        value: ustabul-admin
+        value: egesoykara
       - key: AUTO_SUPERUSER_EMAIL
         value: admin@ustabul.local
       - key: AUTO_SUPERUSER_PASSWORD
