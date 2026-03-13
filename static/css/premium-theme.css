@@ -377,7 +377,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   z-index: 2;
   margin-top: 22px;
   padding: 28px 0 26px;
-  background: #050505;
+  background: #0e7490;
   color: #f8fafc;
 }
 
@@ -404,7 +404,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
 .site-footer .site-brand-copy small,
 .site-footer-description,
 .site-footer-bottom {
-  color: rgba(248, 250, 252, 0.72);
+  color: #ffffff;
 }
 
 .site-footer-brand:hover,
@@ -413,7 +413,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
 }
 
 .site-footer-description {
-  margin: 0;
+  margin: 10px 0 0;
   max-width: 42ch;
   line-height: 1.65;
   font-size: 0.92rem;
@@ -442,7 +442,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
-  color: rgba(248, 250, 252, 0.72);
+  color: #ffffff;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.22s var(--premium-ease);
