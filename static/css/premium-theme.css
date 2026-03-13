@@ -376,15 +376,17 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   position: relative;
   z-index: 2;
   margin-top: 22px;
-  padding: 0 0 26px;
+  padding: 28px 0 26px;
+  background: #050505;
+  color: #f8fafc;
 }
 
 .site-footer-shell {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.8fr) minmax(0, 0.8fr);
   gap: 28px;
-  padding: 22px 0 0;
-  border-top: 1px solid color-mix(in srgb, var(--premium-border) 72%, var(--line));
+  padding: 0;
+  border-top: none;
 }
 
 .site-footer-brand {
@@ -393,14 +395,21 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   text-decoration: none;
 }
 
+.site-footer .site-brand,
+.site-footer .site-brand:hover,
+.site-footer .site-brand:focus-visible {
+  color: #f8fafc !important;
+}
+
+.site-footer .site-brand-copy small,
 .site-footer-description,
 .site-footer-bottom {
-  color: var(--text-soft);
+  color: rgba(248, 250, 252, 0.72);
 }
 
 .site-footer-brand:hover,
 .site-footer-brand:focus-visible {
-  color: var(--text) !important;
+  color: #f8fafc !important;
 }
 
 .site-footer-description {
@@ -424,16 +433,16 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   font-size: 0.83rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text);
+  color: #f8fafc;
   font-weight: 800;
-  border-bottom: 1px solid color-mix(in srgb, var(--premium-border) 78%, var(--line));
+  border-bottom: 1px solid rgba(248, 250, 252, 0.16);
 }
 
 .site-footer-column a {
   display: inline-flex;
   align-items: center;
   min-height: 30px;
-  color: var(--text-soft);
+  color: rgba(248, 250, 252, 0.72);
   text-decoration: none;
   font-weight: 600;
   transition: color 0.22s var(--premium-ease);
@@ -441,7 +450,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
 
 .site-footer-column a:hover,
 .site-footer-column a:focus-visible {
-  color: var(--text);
+  color: #ffffff;
 }
 
 .site-footer-bottom {
@@ -451,7 +460,7 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   flex-wrap: wrap;
   padding: 14px 0 0;
   margin-top: 14px;
-  border-top: 1px solid color-mix(in srgb, var(--premium-border) 40%, transparent);
+  border-top: 1px solid rgba(248, 250, 252, 0.12);
   font-size: 0.8rem;
 }
 
