@@ -1,12 +1,14 @@
-import 'package:flutter/foundation.dart';
-
 class AppConfig {
+  static const _defaultSiteUrl = 'https://ustabul.onrender.com';
   static const _siteUrlFromEnv = String.fromEnvironment('SITE_URL', defaultValue: '');
   static const _apiBaseUrlFromEnv = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  static const userAgent = 'UstaBulMobile/1.0';
 
   // Override with:
-  // flutter run --dart-define=SITE_URL=https://your-domain.com
-  // Legacy fallback: --dart-define=API_BASE_URL=https://your-domain.com
+  // flutter run --dart-define=SITE_URL=https://ustabul.onrender.com
+  // Local dev example:
+  // flutter run --dart-define=SITE_URL=http://10.0.2.2:8000
+  // Legacy fallback: --dart-define=API_BASE_URL=https://ustabul.onrender.com
   static String get siteUrl {
     if (_siteUrlFromEnv.isNotEmpty) {
       return _siteUrlFromEnv;
@@ -14,18 +16,7 @@ class AppConfig {
     if (_apiBaseUrlFromEnv.isNotEmpty) {
       return _apiBaseUrlFromEnv;
     }
-
-    if (kIsWeb) {
-      return 'http://127.0.0.1:8000';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-        return 'http://127.0.0.1:8000';
-      default:
-        return 'http://10.0.2.2:8000';
-    }
+    return _defaultSiteUrl;
   }
 
   static String get apiBaseUrl {
@@ -34,4 +25,6 @@ class AppConfig {
     }
     return siteUrl;
   }
+
+  static Uri get siteUri => Uri.parse(siteUrl);
 }

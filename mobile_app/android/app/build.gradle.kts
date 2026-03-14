@@ -1,5 +1,6 @@
 import java.io.FileInputStream
 import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     id("com.android.application")
@@ -14,6 +15,14 @@ val keystoreProperties = Properties().apply {
         FileInputStream(propsFile).use { load(it) }
     }
 }
+
+val releaseStoreFilePath = keystoreProperties.getProperty("storeFile")?.trim().orEmpty()
+val hasReleaseSigning =
+    releaseStoreFilePath.isNotBlank() &&
+        keystoreProperties.getProperty("storePassword")?.trim().isNullOrEmpty().not() &&
+        keystoreProperties.getProperty("keyAlias")?.trim().isNullOrEmpty().not() &&
+        keystoreProperties.getProperty("keyPassword")?.trim().isNullOrEmpty().not() &&
+        rootProject.file(releaseStoreFilePath).exists()
 
 android {
     namespace = "com.ustabul.mobile.ustabul_mobile"
@@ -39,9 +48,8 @@ android {
 
     signingConfigs {
         create("release") {
-            val storeFilePath = keystoreProperties.getProperty("storeFile")
-            if (!storeFilePath.isNullOrBlank()) {
-                storeFile = rootProject.file(storeFilePath)
+            if (hasReleaseSigning) {
+                storeFile = rootProject.file(releaseStoreFilePath)
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
@@ -51,16 +59,26 @@ android {
 
     buildTypes {
         release {
-            signingConfig =
-                if (keystoreProperties.getProperty("storeFile").isNullOrBlank()) {
-                    signingConfigs.getByName("debug")
-                } else {
-                    signingConfigs.getByName("release")
-                }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+gradle.taskGraph.whenReady {
+    val wantsReleaseBuild =
+        allTasks.any { task ->
+            val name = task.name.lowercase()
+            name.contains("release") && (name.contains("bundle") || name.contains("assemble"))
+        }
+
+    if (wantsReleaseBuild && !hasReleaseSigning) {
+        throw GradleException(
+            "Android release signing eksik. " +
+                "mobile_app/android/key.properties dosyasini ve release keystore'u ayarlamadan release build alinmaz."
+        )
+    }
 }
