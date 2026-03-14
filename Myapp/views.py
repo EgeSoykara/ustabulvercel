@@ -1711,9 +1711,17 @@ def build_provider_waiting_selection_flow_state():
         "step": "Adım 2/4",
         "title": "Müşteri seçimi bekleniyor",
         "hint": "Teklifiniz müşteriye ulaştı.",
-        "next_action": "Müşteri karar verdiğinde iş aktif işlere taşınır.",
+        "next_action": "Müşteri karar vermezse teklifi geri çekebilirsiniz.",
         "tone": "waiting",
     }
+
+
+def provider_can_release_request_match(service_request, appointment, *, calendar_enabled):
+    if not calendar_enabled or service_request.status != "matched":
+        return False
+    if appointment is None:
+        return True
+    return appointment.status in {"rejected", "cancelled"}
 
 
 def build_provider_thread_flow_state(appointment, *, calendar_enabled):
@@ -1731,7 +1739,7 @@ def build_provider_thread_flow_state(appointment, *, calendar_enabled):
             "step": "Adım 3/4",
             "title": "Randevu saati bekleniyor",
             "hint": "Müşteri henüz bir saat seçmedi.",
-            "next_action": "Müşterinin randevu oluşturmasını bekleyin.",
+            "next_action": "Müşteri dönmezse eşleşmeyi sonlandırabilirsiniz.",
             "tone": "waiting",
         }
 
@@ -1741,7 +1749,7 @@ def build_provider_thread_flow_state(appointment, *, calendar_enabled):
             "step": "Adım 3/4",
             "title": "Yeni randevu saati bekleniyor",
             "hint": "Mevcut randevu aktif değil.",
-            "next_action": "Müşterinin yeni bir randevu oluşturması gerekiyor.",
+            "next_action": "Müşteri dönmezse eşleşmeyi sonlandırabilirsiniz.",
             "tone": "danger",
         }
     if appointment_status == "pending":
@@ -2061,6 +2069,76 @@ def dispatch_next_provider_offer(service_request, actor_user=None, actor_role="s
     ):
         return {"result": "invalid-state"}
     return {"result": "all-contacted"}
+
+
+def reroute_service_request_after_provider_exit(
+    service_request,
+    *,
+    actor_user=None,
+    actor_role="system",
+    source="system",
+    note="",
+):
+    has_accepted_offer = service_request.provider_offers.filter(status="accepted", provider__is_verified=True).exists()
+    has_pending_offer = service_request.provider_offers.filter(status="pending", provider__is_verified=True).exists()
+
+    extra_update_fields = []
+    if service_request.matched_provider_id is not None:
+        service_request.matched_provider = None
+        extra_update_fields.append("matched_provider")
+    if service_request.matched_offer_id is not None:
+        service_request.matched_offer = None
+        extra_update_fields.append("matched_offer")
+    if service_request.matched_at is not None:
+        service_request.matched_at = None
+        extra_update_fields.append("matched_at")
+
+    if has_accepted_offer:
+        if service_request.status == "pending_customer":
+            if extra_update_fields:
+                service_request.save(update_fields=extra_update_fields)
+            create_workflow_event(
+                service_request,
+                from_status="pending_customer",
+                to_status="pending_customer",
+                actor_user=actor_user,
+                actor_role=actor_role,
+                source=source,
+                note=note,
+            )
+            return {"result": "pending_customer", "offers": []}
+        if not transition_service_request_status(
+            service_request,
+            "pending_customer",
+            extra_update_fields=extra_update_fields,
+            actor_user=actor_user,
+            actor_role=actor_role,
+            source=source,
+            note=note,
+        ):
+            return {"result": "invalid-state", "offers": []}
+        return {"result": "pending_customer", "offers": []}
+
+    if has_pending_offer:
+        if not transition_service_request_status(
+            service_request,
+            "pending_provider",
+            extra_update_fields=extra_update_fields,
+            actor_user=actor_user,
+            actor_role=actor_role,
+            source=source,
+            note=note,
+        ):
+            return {"result": "invalid-state", "offers": []}
+        return {"result": "pending_provider", "offers": []}
+
+    return dispatch_next_provider_offer(
+        service_request,
+        actor_user=actor_user,
+        actor_role=actor_role,
+        source=source,
+        note=note,
+    )
 
 
 @never_cache
@@ -4066,6 +4144,7 @@ def build_provider_panel_context(request, provider):
         offer.flow_hint = flow_state["hint"]
         offer.flow_next_action = flow_state["next_action"]
         offer.flow_tone = flow_state["tone"]
+        offer.can_withdraw_offer = True
 
     recent_offers_qs = (
         provider.offers.exclude(status="pending")
@@ -4199,6 +4278,11 @@ def build_provider_panel_context(request, provider):
         thread.flow_hint = flow_state["hint"]
         thread.flow_next_action = flow_state["next_action"]
         thread.flow_tone = flow_state["tone"]
+        thread.can_release_match = provider_can_release_request_match(
+            thread,
+            thread.appointment_entry,
+            calendar_enabled=calendar_enabled,
+        )
     total_unread_messages = ServiceMessage.objects.filter(
         service_request__matched_provider=provider,
         service_request__status="matched",
@@ -4758,4 +4842,149 @@ def provider_reject_offer(request, offer_id):
             request,
             f"Talep {get_request_display_code(service_request)} için yeni aday bulunamadı. Kayıt korunuyor.",
         )
+    return redirect("provider_requests")
+
+
+@login_required
+@require_POST
+def provider_withdraw_offer(request, offer_id):
+    provider, blocked_response = get_verified_provider_or_redirect(request)
+    if blocked_response:
+        return blocked_response
+
+    rate_limit_response = reject_rate_limited_request(
+        request,
+        "provider-withdraw-offer",
+        "provider_requests",
+        max_attempts=get_action_rate_limit_max_attempts(),
+        window_seconds=get_action_rate_limit_window_seconds(),
+    )
+    if rate_limit_response:
+        return rate_limit_response
+
+    duplicate_response = reject_duplicate_submission(request, "provider-withdraw-offer", "provider_requests")
+    if duplicate_response:
+        return duplicate_response
+
+    actor_role = infer_actor_role(request.user)
+    with transaction.atomic():
+        offer = (
+            ProviderOffer.objects.select_for_update()
+            .select_related("service_request")
+            .filter(id=offer_id, provider=provider)
+            .first()
+        )
+        if not offer:
+            messages.warning(request, "Teklif bulunamadı.")
+            return redirect("provider_requests")
+
+        service_request = ServiceRequest.objects.select_for_update().filter(id=offer.service_request_id).first()
+        if not service_request:
+            messages.warning(request, "Talep artık mevcut değil.")
+            return redirect("provider_requests")
+
+        if (
+            offer.status != "accepted"
+            or service_request.status != "pending_customer"
+            or service_request.matched_provider_id is not None
+        ):
+            messages.warning(request, "Bu teklif artık geri çekilemez.")
+            return redirect("provider_requests")
+
+        now = timezone.now()
+        offer.status = "expired"
+        offer.responded_at = now
+        offer.save(update_fields=["status", "responded_at"])
+
+        reroute_result = reroute_service_request_after_provider_exit(
+            service_request,
+            actor_user=request.user,
+            actor_role=actor_role,
+            source="user",
+            note="Usta müşteri seçimi bekleyen teklifini geri çekti",
+        )
+        if reroute_result["result"] == "invalid-state":
+            messages.warning(request, "Talep durumu güncellenemedi.")
+            return redirect("provider_requests")
+
+    messages.info(
+        request,
+        f"Talep {get_request_display_code(service_request)} için teklifinizi geri çektiniz.",
+    )
+    return redirect("provider_requests")
+
+
+@login_required
+@require_POST
+def provider_release_request(request, request_id):
+    provider, blocked_response = get_verified_provider_or_redirect(request)
+    if blocked_response:
+        return blocked_response
+
+    rate_limit_response = reject_rate_limited_request(
+        request,
+        "provider-release-request",
+        "provider_requests",
+        max_attempts=get_action_rate_limit_max_attempts(),
+        window_seconds=get_action_rate_limit_window_seconds(),
+    )
+    if rate_limit_response:
+        return rate_limit_response
+
+    duplicate_response = reject_duplicate_submission(request, "provider-release-request", "provider_requests")
+    if duplicate_response:
+        return duplicate_response
+
+    actor_role = infer_actor_role(request.user)
+    with transaction.atomic():
+        service_request = (
+            ServiceRequest.objects.select_for_update()
+            .select_related("matched_offer")
+            .filter(id=request_id, matched_provider=provider)
+            .first()
+        )
+        if not service_request:
+            messages.warning(request, "Aktif iş bulunamadı.")
+            return redirect("provider_requests")
+
+        appointment = None
+        if is_calendar_enabled():
+            appointment = (
+                ServiceAppointment.objects.select_for_update()
+                .filter(service_request=service_request)
+                .first()
+            )
+
+        if not provider_can_release_request_match(
+            service_request,
+            appointment,
+            calendar_enabled=is_calendar_enabled(),
+        ):
+            messages.warning(request, "Bu iş için sonlandırma aksiyonu şu anda uygun değil.")
+            return redirect("provider_requests")
+
+        now = timezone.now()
+        matched_offer = service_request.matched_offer
+        if matched_offer and matched_offer.provider_id == provider.id and matched_offer.status == "accepted":
+            matched_offer.status = "expired"
+            matched_offer.responded_at = now
+            matched_offer.save(update_fields=["status", "responded_at"])
+
+        purge_request_messages(service_request.id)
+
+        reroute_result = reroute_service_request_after_provider_exit(
+            service_request,
+            actor_user=request.user,
+            actor_role=actor_role,
+            source="user",
+            note="Usta müşteriden yanıt beklediği eşleşmeyi sonlandırdı",
+        )
+        if reroute_result["result"] == "invalid-state":
+            messages.warning(request, "Talep durumu güncellenemedi.")
+            return redirect("provider_requests")
+
+    messages.info(
+        request,
+        f"Talep {get_request_display_code(service_request)} için eşleşmeyi sonlandırdınız.",
+    )
     return redirect("provider_requests")

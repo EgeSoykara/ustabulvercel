@@ -113,6 +113,17 @@
               <div class="small">{{ offer.flow_hint }}</div>
               <div class="small"><strong>Sıradaki aksiyon:</strong> {{ offer.flow_next_action }}</div>
             </div>
+            {% if offer.can_withdraw_offer %}
+              <div class="small mt-2 text-muted">
+                Müşteri uzun süre yanıt vermezse teklifinizi geri çekebilirsiniz.
+              </div>
+              <form method="post" action="{% url 'provider_withdraw_offer' offer.id %}" class="m-0 mt-2" data-confirm-message="Bu teklifi geri çekmek istediğinize emin misiniz?">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-x-octagon me-1"></i>Teklifi Geri Çek
+                </button>
+              </form>
+            {% endif %}
           </div>
         {% endfor %}
       </div>
@@ -182,6 +193,17 @@
                   </form>
                 {% endif %}
               {% endif %}
+            {% endif %}
+            {% if thread.can_release_match %}
+              <div class="small mt-2 text-muted">
+                Müşteri ilerlemiyorsa bu eşleşmeyi sonlandırıp talebi yeniden beklemeye alabilirsiniz.
+              </div>
+              <form method="post" action="{% url 'provider_release_request' thread.id %}" class="m-0 mt-2" data-confirm-message="Bu eşleşmeyi sonlandırmak istediğinize emin misiniz?">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-slash-circle me-1"></i>Eşleşmeyi Sonlandır
+                </button>
+              </form>
             {% endif %}
           </article>
         {% endfor %}

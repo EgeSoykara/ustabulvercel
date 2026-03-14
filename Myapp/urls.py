@@ -46,5 +46,7 @@ urlpatterns = [
     path('usta/randevu/<int:appointment_id>/reddet/', views.provider_reject_appointment, name='provider_reject_appointment'),
     path('usta/teklif/<int:offer_id>/kabul/', views.provider_accept_offer, name='provider_accept_offer'),
     path('usta/teklif/<int:offer_id>/reddet/', views.provider_reject_offer, name='provider_reject_offer'),
+    path('usta/teklif/<int:offer_id>/geri-cek/', views.provider_withdraw_offer, name='provider_withdraw_offer'),
+    path('usta/talep/<int:request_id>/sonlandir/', views.provider_release_request, name='provider_release_request'),
     path('contact/',views.contact,name='contact'),
 ]

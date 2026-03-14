@@ -1077,6 +1077,183 @@ class MarketplaceTests(TestCase):
         self.assertContains(response, 'href="#pending-appointments"')
         self.assertContains(response, f'form="confirm-pending-appointment-{appointment.id}"')
 
+    def test_provider_requests_shows_waiting_state_exit_actions(self):
+        customer = User.objects.create_user(username="beklemecikis", password="GucluSifre123!")
+
+        waiting_selection_request = ServiceRequest.objects.create(
+            customer_name="Bekleyen Teklif Musteri",
+            customer_phone="05001117770",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Teklif geri cekme gorunurluk testi",
+            customer=customer,
+            status="pending_customer",
+        )
+        waiting_offer = ProviderOffer.objects.create(
+            service_request=waiting_selection_request,
+            provider=self.provider_ali,
+            token="WITHDRAWUI1",
+            sequence=1,
+            status="accepted",
+        )
+
+        matched_request = ServiceRequest.objects.create(
+            customer_name="Bekleyen Randevu Musteri",
+            customer_phone="05001117771",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Eslesme sonlandirma gorunurluk testi",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="matched",
+        )
+        matched_offer = ProviderOffer.objects.create(
+            service_request=matched_request,
+            provider=self.provider_ali,
+            token="RELEASEUI1",
+            sequence=1,
+            status="accepted",
+        )
+        matched_request.matched_offer = matched_offer
+        matched_request.save(update_fields=["matched_offer"])
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.get(reverse("provider_requests"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("provider_withdraw_offer", args=[waiting_offer.id]))
+        self.assertContains(response, reverse("provider_release_request", args=[matched_request.id]))
+
+    def test_provider_can_withdraw_waiting_selection_offer(self):
+        customer = User.objects.create_user(username="gericekucreti", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Geri Cek Musteri",
+            customer_phone="05001117772",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Teklif geri cekme testi",
+            customer=customer,
+            status="pending_customer",
+        )
+        offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="WITHDRAW01",
+            sequence=1,
+            status="accepted",
+        )
+        waiting_offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_hasan,
+            token="WITHDRAW02",
+            sequence=2,
+            status="pending",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        self.client.post(reverse("provider_withdraw_offer", args=[offer.id]), follow=True)
+
+        service_request.refresh_from_db()
+        offer.refresh_from_db()
+        waiting_offer.refresh_from_db()
+        self.assertEqual(offer.status, "expired")
+        self.assertEqual(waiting_offer.status, "pending")
+        self.assertEqual(service_request.status, "pending_provider")
+        self.assertIsNone(service_request.matched_provider)
+        self.assertIsNone(service_request.matched_offer)
+
+    def test_provider_can_release_matched_request_while_waiting_for_customer_schedule(self):
+        customer = User.objects.create_user(username="eslesmecikis", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Eslesme Cikis Musteri",
+            customer_phone="05001117773",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Eslesme cikis testi",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="matched",
+        )
+        offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="RELEASE01",
+            sequence=1,
+            status="accepted",
+        )
+        service_request.matched_offer = offer
+        service_request.matched_at = timezone.now()
+        service_request.save(update_fields=["matched_offer", "matched_at"])
+        ServiceMessage.objects.create(
+            service_request=service_request,
+            sender_user=customer,
+            sender_role="customer",
+            body="Bu mesajlar eslesme sonlandiginda temizlenmeli",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        self.client.post(reverse("provider_release_request", args=[service_request.id]), follow=True)
+
+        service_request.refresh_from_db()
+        offer.refresh_from_db()
+        self.assertEqual(offer.status, "expired")
+        self.assertEqual(service_request.status, "pending_provider")
+        self.assertIsNone(service_request.matched_provider)
+        self.assertIsNone(service_request.matched_offer)
+        self.assertIsNone(service_request.matched_at)
+        self.assertFalse(ServiceMessage.objects.filter(service_request=service_request).exists())
+        self.assertTrue(
+            ProviderOffer.objects.filter(
+                service_request=service_request,
+                provider=self.provider_hasan,
+                status="pending",
+            ).exists()
+        )
+
+    def test_provider_cannot_release_matched_request_while_pending_appointment_exists(self):
+        customer = User.objects.create_user(username="eslesmecikisyok", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Eslesme Cikis Yok Musteri",
+            customer_phone="05001117774",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Uygun olmayan eslesme sonlandirma testi",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="matched",
+        )
+        offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="RELEASE02",
+            sequence=1,
+            status="accepted",
+        )
+        service_request.matched_offer = offer
+        service_request.save(update_fields=["matched_offer"])
+        ServiceAppointment.objects.create(
+            service_request=service_request,
+            customer=customer,
+            provider=self.provider_ali,
+            scheduled_for=timezone.now() + timedelta(days=1),
+            status="pending",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        self.client.post(reverse("provider_release_request", args=[service_request.id]), follow=True)
+
+        service_request.refresh_from_db()
+        offer.refresh_from_db()
+        self.assertEqual(service_request.status, "matched")
+        self.assertEqual(service_request.matched_provider, self.provider_ali)
+        self.assertEqual(service_request.matched_offer, offer)
+        self.assertEqual(offer.status, "accepted")
+
     @override_settings(APPOINTMENT_PROVIDER_CONFIRM_MINUTES=5)
     def test_pending_appointment_auto_cancels_after_provider_timeout(self):
         customer = User.objects.create_user(username="sureasimiusta", password="GucluSifre123!")
