@@ -1,0 +1,264 @@
+<section class="card panel-card shadow-sm mb-4 my-requests-section">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+      <h1 class="h4 mb-0"><i class="bi bi-kanban me-2"></i>Taleplerim</h1>
+      <div class="my-requests-toolbar-actions d-flex align-items-center gap-2 flex-wrap">
+        <a class="btn btn-main" href="{% url 'request_form_page' %}"><i class="bi bi-plus-circle me-1"></i>Yeni Talep</a>
+        <a class="btn btn-outline-secondary" href="{% url 'agreement_history' %}"><i class="bi bi-journal-check me-1"></i>Anlaşmalar</a>
+        <a class="btn btn-outline-secondary" href="{% url 'account_settings' %}"><i class="bi bi-gear me-1"></i>Hesap</a>
+        {% if cancelled_count %}
+          <form method="post" action="{% url 'delete_all_cancelled_requests' %}" class="m-0" data-confirm-message="Tüm iptal edilmiş talepleri kalıcı olarak silmek istediğinize emin misiniz?">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash3 me-1"></i>İptalleri Sil ({{ cancelled_count }})</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="row g-2 customer-panel-summary-grid">
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">Usta Yanıtı Bekleyen</div>
+          <div class="h5 mb-0">{{ customer_flow_summary.waiting_provider_count }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">Seçim Bekleyen</div>
+          <div class="h5 mb-0">{{ customer_flow_summary.waiting_customer_selection_count }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">Aktif İş</div>
+          <div class="h5 mb-0">{{ customer_flow_summary.active_matched_count }}</div>
+        </div>
+      </div>
+      {% if calendar_enabled %}
+        <div class="col-md-3">
+          <div class="border rounded p-2 h-100">
+            <div class="small text-muted">Randevu Yanıtı Bekleyen</div>
+            <div class="h5 mb-0">{{ customer_flow_summary.waiting_provider_appointment_count }}</div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% if pending_selection_items %}
+  <section id="customer-selection-hub" class="card panel-card shadow-sm mb-4 my-requests-section">
+    <div class="card-body p-4">
+      <h2 class="h6 mb-2"><i class="bi bi-person-check-fill me-1"></i>Usta Seçimi</h2>
+      <div class="d-grid gap-2">
+        {% for item in pending_selection_items %}
+          <details id="request-card-{{ item.id }}" class="border rounded p-2 {% if item.is_highlighted %}panel-card-highlight{% endif %}" {% if forloop.first or item.is_highlighted %}open{% endif %}>
+            <summary class="fw-semibold">
+              <span class="request-card-code me-2">{{ item.display_code }}</span>
+              {% if item.recent_change_label %}
+                <span class="request-change-badge tone-{{ item.recent_change_tone }} me-2">{{ item.recent_change_label }}</span>
+              {% endif %}
+              {{ item.service_type.name }} - {{ item.city }} / {{ item.district }} ({{ item.accepted_offers|length }} teklif)
+            </summary>
+            <div class="request-flow-card tone-{{ item.flow_tone }} mt-3 mb-2">
+              <div class="request-flow-head">
+                <span class="request-flow-step">{{ item.flow_step }}</span>
+                <strong>{{ item.flow_title }}</strong>
+              </div>
+              <div class="small">{{ item.flow_hint }}</div>
+              <div class="small"><strong>Sıradaki aksiyon:</strong> {{ item.flow_next_action }}</div>
+            </div>
+            <div class="mt-2 d-grid gap-2">
+              {% for offer in item.accepted_offers %}
+                <form method="post" action="{% url 'select_provider_offer' item.id offer.id %}" class="border rounded p-2 d-flex align-items-center justify-content-between flex-wrap gap-2" data-offer-select-form>
+                  {% csrf_token %}
+                  <div class="d-flex flex-column gap-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <strong>{{ offer.provider.full_name }}</strong>
+                      {% if item.recommended_offer_id == offer.id %}
+                        <span class="badge text-bg-info">Önerilen</span>
+                      {% endif %}
+                    </div>
+                    {% if offer.quote_note %}
+                      <div class="small text-muted request-detail-preview"><strong>Usta notu:</strong> {{ offer.quote_note|linebreaksbr }}</div>
+                    {% endif %}
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <a href="{% url 'provider_detail' offer.provider.id %}" class="btn btn-sm btn-outline-secondary">Profil</a>
+                    <button type="submit" class="btn btn-sm btn-main" data-offer-select-submit><i class="bi bi-check2 me-1"></i>Ustayı Seç</button>
+                  </div>
+                </form>
+              {% empty %}
+                <span class="small text-muted">Henüz seçilebilir teklif yok.</span>
+              {% endfor %}
+              <form method="post" action="{% url 'cancel_request' item.id %}" class="m-0" data-confirm-message="Bu talebi iptal etmek istediğinize emin misiniz?">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Talebi İptal Et</button>
+              </form>
+            </div>
+          </details>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endif %}
+
+<section class="card panel-card shadow-sm mb-4 my-requests-section">
+  <div class="card-body p-4">
+    {% if requests %}
+      <div class="d-grid gap-3">
+        {% for item in requests %}
+          <article id="request-card-{{ item.id }}" class="border rounded p-3 {% if item.is_highlighted %}panel-card-highlight{% endif %}" data-live-request-card="{{ item.id }}">
+            <div class="request-card-kicker">
+              <span class="request-card-code">{{ item.display_code }}</span>
+              <span class="request-flow-step">{{ item.flow_step }}</span>
+              {% if item.recent_change_label %}
+                <span class="request-change-badge tone-{{ item.recent_change_tone }}">{{ item.recent_change_label }}</span>
+              {% endif %}
+            </div>
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+              <div>
+                <h3 class="h6 mb-1">{{ item.service_type.name }}</h3>
+                <div class="small text-muted">{{ item.city }} / {{ item.district }} · {{ item.created_at|date:"d.m.Y H:i" }}</div>
+              </div>
+              <span class="status-pill status-{{ item.status }}">{{ item.get_status_display }}</span>
+            </div>
+
+            <div class="request-flow-card tone-{{ item.flow_tone }} mt-3">
+              <div class="request-flow-head">
+                <strong>{{ item.flow_title }}</strong>
+              </div>
+              <div class="small">{{ item.flow_hint }}</div>
+              <div class="small"><strong>Sıradaki aksiyon:</strong> {{ item.flow_next_action }}</div>
+            </div>
+
+            {% if item.cancel_policy_note %}
+              <div class="small mt-2 text-{% if item.cancel_policy_tone == 'danger' %}danger{% else %}warning{% endif %}">
+                {{ item.cancel_policy_note }}
+              </div>
+            {% endif %}
+
+            {% if item.matched_provider %}
+              <div class="small mt-2"><strong>Usta:</strong> {{ item.matched_provider.full_name }}{% if item.matched_provider.phone %} ({{ item.matched_provider.phone }}){% endif %}</div>
+            {% endif %}
+
+            {% if calendar_enabled and item.appointment_entry %}
+              <div class="small mt-1">
+                <strong>Randevu:</strong>
+                {{ item.appointment_entry.get_status_display }}
+                {% if item.appointment_entry.scheduled_for %}
+                  - {{ item.appointment_entry.scheduled_for|date:"d.m.Y H:i" }}
+                {% endif %}
+              </div>
+            {% endif %}
+            {% if item.matched_offer and item.matched_offer.quote_note %}
+              <div class="small mt-1 request-detail-preview"><strong>Usta notu:</strong> {{ item.matched_offer.quote_note|linebreaksbr }}</div>
+            {% endif %}
+            {% if calendar_enabled and item.appointment_entry and item.appointment_entry.customer_note %}
+              <div class="small mt-1 request-detail-preview"><strong>Sizin randevu notunuz:</strong> {{ item.appointment_entry.customer_note|linebreaksbr }}</div>
+            {% endif %}
+            {% if calendar_enabled and item.appointment_entry and item.appointment_entry.provider_note %}
+              <div class="small mt-1 request-detail-preview"><strong>Usta randevu notu:</strong> {{ item.appointment_entry.provider_note|linebreaksbr }}</div>
+            {% endif %}
+
+            <div class="request-card-actions d-flex align-items-center gap-2 flex-wrap mt-3">
+              {% if item.status == "new" or item.status == "pending_provider" %}
+                <form method="post" action="{% url 'cancel_request' item.id %}" class="m-0" data-confirm-message="Bu talebi iptal etmek istediğinize emin misiniz?">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Talebi İptal Et</button>
+                </form>
+              {% elif item.status == "pending_customer" %}
+                <a href="#customer-selection-hub" class="btn btn-sm btn-main">Usta Seçimine Git</a>
+                <form method="post" action="{% url 'cancel_request' item.id %}" class="m-0" data-confirm-message="Bu talebi iptal etmek istediğinize emin misiniz?">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Talebi İptal Et</button>
+                </form>
+              {% elif item.status == "matched" %}
+                <a href="{% url 'request_messages' item.id %}" class="btn btn-sm btn-outline-secondary">
+                  Mesajlar
+                  {% if item.unread_messages %}
+                    <span class="badge text-bg-danger ms-1">{{ item.unread_messages }}</span>
+                  {% endif %}
+                </a>
+
+                {% if calendar_enabled %}
+                  {% if item.appointment_entry %}
+                    {% if item.appointment_entry.status == "pending" or item.appointment_entry.status == "pending_customer" or item.appointment_entry.status == "confirmed" %}
+                      <form method="post" action="{% url 'cancel_appointment' item.id %}" class="m-0" data-confirm-message="Bu randevuyu iptal etmek istediğinize emin misiniz?">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Randevuyu İptal Et</button>
+                      </form>
+                    {% endif %}
+                  {% endif %}
+
+                  {% if not item.appointment_entry or item.appointment_entry.status == "rejected" or item.appointment_entry.status == "cancelled" %}
+                    <form method="post" action="{% url 'create_appointment' item.id %}" class="m-0 d-flex align-items-center gap-2 flex-wrap request-card-form-inline">
+                      {% csrf_token %}
+                      <div class="appointment-quick-actions d-flex align-items-center gap-2 flex-wrap">
+                        <span class="small text-muted">Hızlı Saat:</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="30">30 dk</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="60">1 saat</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-appointment-offset-minutes="120">2 saat</button>
+                      </div>
+                      <input type="datetime-local" name="scheduled_for" class="form-control form-control-sm" required>
+                      <input type="text" name="customer_note" class="form-control form-control-sm" maxlength="100" placeholder="Randevu notu (opsiyonel)">
+                      <button type="submit" class="btn btn-sm btn-main">Randevu Oluştur</button>
+                    </form>
+                  {% endif %}
+                {% endif %}
+
+                {% if item.can_complete_now %}
+                  <form method="post" action="{% url 'complete_request' item.id %}" class="m-0" data-confirm-message="Bu işi tamamlandı olarak işaretlemek istediğinize emin misiniz?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success">İşi Tamamla</button>
+                  </form>
+                {% elif item.complete_block_reason %}
+                  <span class="small text-muted">{{ item.complete_block_reason }}</span>
+                {% endif %}
+              {% elif item.status == "completed" %}
+                {% if item.can_rate %}
+                  <form method="post" action="{% url 'rate_request' item.id %}" class="m-0 d-flex align-items-center gap-2 flex-wrap request-card-form-inline">
+                    {% csrf_token %}
+                    <select name="score" class="form-select form-select-sm" required>
+                      <option value="">Puan</option>
+                      <option value="5" {% if item.rating_entry and item.rating_entry.score == 5 %}selected{% endif %}>5</option>
+                      <option value="4" {% if item.rating_entry and item.rating_entry.score == 4 %}selected{% endif %}>4</option>
+                      <option value="3" {% if item.rating_entry and item.rating_entry.score == 3 %}selected{% endif %}>3</option>
+                      <option value="2" {% if item.rating_entry and item.rating_entry.score == 2 %}selected{% endif %}>2</option>
+                      <option value="1" {% if item.rating_entry and item.rating_entry.score == 1 %}selected{% endif %}>1</option>
+                    </select>
+                    <input type="text" name="comment" class="form-control form-control-sm" placeholder="Yorum (opsiyonel)" value="{% if item.rating_entry %}{{ item.rating_entry.comment }}{% endif %}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Puanı Kaydet</button>
+                  </form>
+                {% else %}
+                  <span class="small text-muted">{{ item.rate_block_reason|default:"Bu kayıt için puanlama açık değil." }}</span>
+                {% endif %}
+              {% elif item.status == "cancelled" %}
+                <form method="post" action="{% url 'delete_cancelled_request' item.id %}" class="m-0" data-confirm-message="Bu iptal edilmiş talebi silmek istediğinize emin misiniz?">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Sil</button>
+                </form>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if requests_page_obj.has_other_pages %}
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+          <span class="small text-muted">Sayfa {{ requests_page_obj.number }} / {{ requests_page_obj.paginator.num_pages }}</span>
+          <div class="d-flex align-items-center gap-2">
+            {% if requests_page_obj.has_previous %}
+              <a class="btn btn-sm btn-outline-secondary" href="?page={{ requests_page_obj.previous_page_number }}">Önceki</a>
+            {% endif %}
+            {% if requests_page_obj.has_next %}
+              <a class="btn btn-sm btn-outline-secondary" href="?page={{ requests_page_obj.next_page_number }}">Sonraki</a>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <p class="mb-0 text-muted">Henüz talebiniz yok.</p>
+    {% endif %}
+  </div>
+</section>

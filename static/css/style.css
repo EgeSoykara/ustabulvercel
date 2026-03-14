@@ -1609,6 +1609,75 @@ body.live-sync-attention .panel-card {
   gap: 10px;
 }
 
+.notification-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.notification-filter-form {
+  justify-content: flex-end;
+}
+
+.notification-filter-form .form-select {
+  min-width: 150px;
+}
+
+.notification-filter-pills .btn .badge {
+  font-size: 0.68rem;
+}
+
+.notification-unread-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 4px;
+}
+
+.notification-unread-toggle .form-check-input {
+  margin-top: 0;
+}
+
+.notification-group {
+  display: grid;
+  gap: 12px;
+}
+
+.notification-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notification-section-count,
+.notification-section-unread,
+.notification-read-mark {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.notification-section-count {
+  color: #334155;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.notification-section-unread {
+  color: #b91c1c;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.notification-section-unread.is-empty,
+.notification-read-mark {
+  color: #166534;
+  background: rgba(34, 197, 94, 0.14);
+}
+
 .notification-item {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1652,6 +1721,31 @@ body.live-sync-attention .panel-card {
 [data-theme="dark"] .notification-item {
   border-color: rgba(148, 163, 184, 0.32);
   background: rgba(15, 23, 42, 0.82);
+}
+
+[data-theme="dark"] .notification-group-head {
+  border-bottom-color: rgba(148, 163, 184, 0.24);
+}
+
+[data-theme="dark"] .notification-filter-pills .btn .badge {
+  color: #e2e8f0;
+  background: rgba(30, 41, 59, 0.92) !important;
+}
+
+[data-theme="dark"] .notification-section-count {
+  color: #cbd5e1;
+  background: rgba(71, 85, 105, 0.72);
+}
+
+[data-theme="dark"] .notification-section-unread {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.45);
+}
+
+[data-theme="dark"] .notification-section-unread.is-empty,
+[data-theme="dark"] .notification-read-mark {
+  color: #bbf7d0;
+  background: rgba(20, 83, 45, 0.55);
 }
 
 [data-theme="dark"] .notification-item.is-unread {

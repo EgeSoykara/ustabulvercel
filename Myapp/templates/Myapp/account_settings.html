@@ -4,7 +4,7 @@
   <div class="card-body p-4">
     <h1 class="h4 mb-2"><i class="bi bi-gear-wide-connected me-2"></i>Hesap Ayarları</h1>
     <p class="text-muted mb-0">
-      Hesap bilgilerinizi ve güvenlik ayarlarınızı buradan yönetebilirsiniz.
+      Hesap bilgilerinizi, bildirim tercihlerinizi ve güvenlik ayarlarınızı buradan yönetebilirsiniz.
     </p>
   </div>
 </section>
@@ -24,6 +24,11 @@
           </button>
         </li>
       {% endif %}
+      <li class="nav-item" role="presentation">
+        <button class="btn btn-outline-secondary {% if active_tab == 'notifications' %}active{% endif %}" id="tab-notifications-btn" data-bs-toggle="pill" data-bs-target="#tab-notifications" type="button" role="tab" aria-controls="tab-notifications" aria-selected="{% if active_tab == 'notifications' %}true{% else %}false{% endif %}">
+          <i class="bi bi-bell me-1"></i>Bildirimler
+        </button>
+      </li>
       <li class="nav-item" role="presentation">
         <button class="btn btn-outline-secondary {% if active_tab == 'security' %}active{% endif %}" id="tab-security-btn" data-bs-toggle="pill" data-bs-target="#tab-security" type="button" role="tab" aria-controls="tab-security" aria-selected="{% if active_tab == 'security' %}true{% else %}false{% endif %}">
           <i class="bi bi-shield-lock me-1"></i>Güvenlik
@@ -131,6 +136,50 @@
         </div>
       {% endif %}
 
+      <div class="tab-pane fade {% if active_tab == 'notifications' %}show active{% endif %}" id="tab-notifications" role="tabpanel" aria-labelledby="tab-notifications-btn">
+        <h2 class="h5 mb-3">Bildirim Tercihleri</h2>
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_action" value="notifications">
+          <div class="col-12">
+            <div class="d-grid gap-3">
+              {% for field in notification_form %}
+                <label class="border rounded p-3 d-flex align-items-start gap-3">
+                  {{ field }}
+                  <span>
+                    <span class="fw-semibold d-block">{{ field.label }}</span>
+                    {% if field.name == "allow_message_notifications" %}
+                      <span class="small text-muted d-block mt-1">Yeni mesajlar için bildirim ve rozet göster.</span>
+                    {% elif field.name == "allow_request_notifications" %}
+                      <span class="small text-muted d-block mt-1">Teklif, eşleşme ve talep durumu güncellemelerini göster.</span>
+                    {% elif field.name == "allow_appointment_notifications" %}
+                      <span class="small text-muted d-block mt-1">Randevu oluşturma, onay ve tamamlama güncellemelerini göster.</span>
+                    {% elif field.help_text %}
+                      <span class="small text-muted d-block mt-1">{{ field.help_text }}</span>
+                    {% endif %}
+                    {% for error in field.errors %}
+                      <span class="text-danger small d-block mt-1">{{ error }}</span>
+                    {% endfor %}
+                  </span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          {% if notification_form.non_field_errors %}
+            <div class="col-12">
+              {% for error in notification_form.non_field_errors %}
+                <div class="text-danger small">{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <div class="col-12">
+            <button type="submit" class="btn btn-main">
+              <i class="bi bi-save2 me-1"></i>Bildirim Tercihlerini Kaydet
+            </button>
+          </div>
+        </form>
+      </div>
+
       <div class="tab-pane fade {% if active_tab == 'security' %}show active{% endif %}" id="tab-security" role="tabpanel" aria-labelledby="tab-security-btn">
         <h2 class="h5 mb-3">Şifre Güncelle</h2>
         <form method="post" class="row g-3">
@@ -187,8 +236,8 @@
           {% csrf_token %}
           <div class="col-12">
             <label class="form-label">Onay Metni</label>
-            <input type="text" name="confirmation_text" class="form-control" placeholder="HESABIMI SİL" required>
-            <div class="small text-muted mt-1">Devam etmek için tam olarak <strong>HESABIMI SİL</strong> yazın.</div>
+            <input type="text" name="confirmation_text" class="form-control" placeholder="HESABIMI SIL" required>
+            <div class="small text-muted mt-1">Devam etmek için tam olarak <strong>HESABIMI SIL</strong> yazın.</div>
           </div>
           <div class="col-12">
             <label class="form-label">Mevcut Şifre</label>

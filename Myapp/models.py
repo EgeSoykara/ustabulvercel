@@ -361,6 +361,25 @@ class WorkflowEvent(models.Model):
         return f"{self.target_type} {self.from_status} -> {self.to_status}"
 
 
+class WorkflowEventRead(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="workflow_event_reads")
+    workflow_event = models.ForeignKey(WorkflowEvent, on_delete=models.CASCADE, related_name="read_entries")
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-read_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "workflow_event"], name="unique_workflow_event_read"),
+        ]
+        indexes = [
+            models.Index(fields=["user", "read_at"]),
+            models.Index(fields=["workflow_event", "user"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} read workflow #{self.workflow_event_id}"
+
+
 class ActivityLog(models.Model):
     ACTION_CHOICES = (
         ("request_status", "Talep Durum Degisimi"),
@@ -479,6 +498,9 @@ class SchedulerLock(models.Model):
 class NotificationCursor(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="notification_cursor")
     workflow_seen_at = models.DateTimeField(null=True, blank=True)
+    allow_message_notifications = models.BooleanField(default=True)
+    allow_request_notifications = models.BooleanField(default=True)
+    allow_appointment_notifications = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

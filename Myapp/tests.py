@@ -13,6 +13,7 @@ from .models import (
     CustomerProfile,
     IdempotencyRecord,
     MobileDevice,
+    NotificationCursor,
     Provider,
     ProviderAvailabilitySlot,
     ProviderOffer,
@@ -24,6 +25,7 @@ from .models import (
     ServiceRequest,
     ServiceType,
     WorkflowEvent,
+    WorkflowEventRead,
 )
 from .notifications import build_notification_entries, get_total_unread_notifications_count
 from .views import (
@@ -1036,6 +1038,45 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Musteri notu panelde gorunsun.")
 
+    def test_provider_requests_shows_pending_appointment_action_only_once(self):
+        customer = User.objects.create_user(username="tekaksiyonmusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Tek Aksiyon Musteri",
+            customer_phone="05001117777",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Tek aksiyon gorunurluk testi",
+            matched_provider=self.provider_ali,
+            customer=customer,
+            status="matched",
+        )
+        offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="ONEACTION1",
+            sequence=1,
+            status="accepted",
+        )
+        service_request.matched_offer = offer
+        service_request.save(update_fields=["matched_offer"])
+        appointment = ServiceAppointment.objects.create(
+            service_request=service_request,
+            customer=customer,
+            provider=self.provider_ali,
+            scheduled_for=timezone.now() + timedelta(days=1),
+            status="pending",
+            customer_note="Tek aksiyon notu",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.get(reverse("provider_requests"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("provider_confirm_appointment", args=[appointment.id]), count=1)
+        self.assertContains(response, 'href="#pending-appointments"')
+        self.assertContains(response, f'form="confirm-pending-appointment-{appointment.id}"')
+
     @override_settings(APPOINTMENT_PROVIDER_CONFIRM_MINUTES=5)
     def test_pending_appointment_auto_cancels_after_provider_timeout(self):
         customer = User.objects.create_user(username="sureasimiusta", password="GucluSifre123!")
@@ -1812,6 +1853,41 @@ class MarketplaceTests(TestCase):
         self.assertContains(response, "Teklif notu gorunsun.")
         self.assertContains(response, "Usta randevu notu gorunsun.")
 
+    def test_my_requests_shows_recent_change_badge_for_new_message(self):
+        customer = User.objects.create_user(username="rozetmusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Rozet Musteri",
+            customer_phone="05001237777",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Son degisiklik rozeti testi",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="matched",
+        )
+        matched_offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="BADGE001",
+            sequence=1,
+            status="accepted",
+        )
+        service_request.matched_offer = matched_offer
+        service_request.save(update_fields=["matched_offer"])
+        ServiceMessage.objects.create(
+            service_request=service_request,
+            sender_user=self.provider_user_ali,
+            sender_role="provider",
+            body="Rozet icin yeni mesaj",
+        )
+
+        self.client.login(username="rozetmusteri", password="GucluSifre123!")
+        response = self.client.get(reverse("my_requests"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Yeni mesaj")
+
     def test_provider_accepts_preferred_request_and_auto_matches(self):
         customer = User.objects.create_user(username="ozelmusteri_panel", password="GucluSifre123!")
         self.client.login(username="ozelmusteri_panel", password="GucluSifre123!")
@@ -2512,7 +2588,7 @@ class MarketplaceTests(TestCase):
         self.assertIn("unread_notifications_count", payload)
         self.assertGreaterEqual(payload["unread_notifications_count"], 0)
 
-    def test_notifications_view_marks_provider_notifications_as_read(self):
+    def test_notifications_view_keeps_provider_notifications_unread(self):
         customer = User.objects.create_user(username="notificationsprovidercustomer", password="GucluSifre123!")
         service_request = ServiceRequest.objects.create(
             customer_name="Bildirim Test Musteri",
@@ -2547,15 +2623,238 @@ class MarketplaceTests(TestCase):
         self.client.login(username="aliusta", password="GucluSifre123!")
         response = self.client.get(reverse("notifications"))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'class="notification-unread-mark"')
-        self.assertNotContains(response, 'notification-item is-unread"')
+        self.assertContains(response, "Talep Durumu")
+        self.assertContains(response, "Okunmamış")
+        self.assertContains(response, "data-notification-mark-form")
 
-        self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), 0)
+        self.assertGreater(get_total_unread_notifications_count(self.provider_user_ali), 0)
         snapshot_response = self.client.get(reverse("provider_panel_snapshot"))
         self.assertEqual(snapshot_response.status_code, 200)
-        self.assertEqual(snapshot_response.json().get("unread_notifications_count"), 0)
+        self.assertGreater(snapshot_response.json().get("unread_notifications_count"), 0)
 
-    def test_my_requests_marks_customer_notifications_as_read(self):
+    def test_notifications_view_filters_by_category_and_unread_only(self):
+        customer = User.objects.create_user(username="filtrelemusteri", password="GucluSifre123!")
+        workflow_request = ServiceRequest.objects.create(
+            customer_name="Filtre Musteri",
+            customer_phone="05005554434",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Filtre workflow testi",
+            customer=customer,
+            status="pending_provider",
+        )
+        ProviderOffer.objects.create(
+            service_request=workflow_request,
+            provider=self.provider_ali,
+            token="FILTERWF1",
+            sequence=1,
+            status="pending",
+        )
+        WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=workflow_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Workflow filtre bildirimi",
+        )
+
+        matched_request = ServiceRequest.objects.create(
+            customer_name="Mesaj Musteri",
+            customer_phone="05005554435",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Filtre mesaj testi",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="matched",
+        )
+        matched_offer = ProviderOffer.objects.create(
+            service_request=matched_request,
+            provider=self.provider_ali,
+            token="FILTERMSG1",
+            sequence=1,
+            status="accepted",
+        )
+        matched_request.matched_offer = matched_offer
+        matched_request.save(update_fields=["matched_offer"])
+        ServiceMessage.objects.create(
+            service_request=matched_request,
+            sender_user=customer,
+            sender_role="customer",
+            body="Kategori filtre mesaji",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.get(reverse("notifications"), data={"category": "message", "unread": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Kategori filtre mesaji")
+        self.assertNotContains(response, "Workflow filtre bildirimi")
+
+    def test_notifications_view_supports_history_filters(self):
+        customer = User.objects.create_user(username="gecmisfiltre", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Gecmis Filtre Musteri",
+            customer_phone="05005554436",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Gecmis filtre testi",
+            customer=customer,
+            status="pending_provider",
+        )
+        ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="FILTERDAY1",
+            sequence=1,
+            status="pending",
+        )
+        old_event = WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=service_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Kirk bes gun onceki bildirim",
+        )
+        WorkflowEvent.objects.filter(id=old_event.id).update(created_at=timezone.now() - timedelta(days=45))
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        thirty_day_response = self.client.get(reverse("notifications"), data={"days": "30"})
+        all_response = self.client.get(reverse("notifications"), data={"days": "all"})
+
+        self.assertEqual(thirty_day_response.status_code, 200)
+        self.assertNotContains(thirty_day_response, "Kirk bes gun onceki bildirim")
+        self.assertContains(all_response, "Kirk bes gun onceki bildirim")
+
+    def test_notifications_view_respects_disabled_categories(self):
+        customer = User.objects.create_user(username="tercihbildirimi", password="GucluSifre123!")
+        NotificationCursor.objects.create(
+            user=self.provider_user_ali,
+            allow_message_notifications=True,
+            allow_request_notifications=False,
+            allow_appointment_notifications=False,
+        )
+        service_request = ServiceRequest.objects.create(
+            customer_name="Tercih Musteri",
+            customer_phone="05005554439",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Tercih filtresi testi",
+            customer=customer,
+            status="pending_provider",
+        )
+        ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="PREFTEST1",
+            sequence=1,
+            status="pending",
+        )
+        WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=service_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Tercih nedeniyle gizlenmesi gereken bildirim",
+        )
+
+        self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), 0)
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.get(reverse("notifications"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Tercih nedeniyle gizlenmesi gereken bildirim")
+        self.assertContains(response, "Kapalı bildirim kategorileri")
+        self.assertContains(response, "Talep")
+
+    def test_notifications_open_entry_redirects_provider_to_highlighted_panel_card(self):
+        customer = User.objects.create_user(username="highlightmusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Highlight Musteri",
+            customer_phone="05005554437",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Highlight yonlendirme testi",
+            customer=customer,
+            status="pending_provider",
+        )
+        ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="HIGHLIGHT1",
+            sequence=1,
+            status="pending",
+        )
+        workflow_event = WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=service_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Highlight workflow bildirimi",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.get(reverse("notifications_open_entry", args=[f"wf-{workflow_event.id}"]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"highlight_request={service_request.id}", response["Location"])
+        self.assertIn(f"#pending-offer-card-{service_request.id}", response["Location"])
+
+    def test_my_requests_highlights_card_and_shows_recent_change_badge(self):
+        customer = User.objects.create_user(username="rozetlimusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Rozetli Musteri",
+            customer_phone="05005554440",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Rozet ve vurgulama testi",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="matched",
+        )
+        matched_offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="BADGETEST1",
+            sequence=1,
+            status="accepted",
+        )
+        service_request.matched_offer = matched_offer
+        service_request.save(update_fields=["matched_offer"])
+        ServiceMessage.objects.create(
+            service_request=service_request,
+            sender_user=self.provider_user_ali,
+            sender_role="provider",
+            body="Kartta yeni mesaj rozeti görünmeli",
+        )
+
+        self.client.login(username="rozetlimusteri", password="GucluSifre123!")
+        response = self.client.get(reverse("my_requests"), data={"highlight_request": service_request.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Yeni mesaj")
+        self.assertContains(response, "panel-card-highlight")
+
+    def test_my_requests_keeps_customer_notifications_unread(self):
         customer = User.objects.create_user(username="okundumusteri", password="GucluSifre123!")
         service_request = ServiceRequest.objects.create(
             customer_name="Okundu Musteri",
@@ -2590,9 +2889,9 @@ class MarketplaceTests(TestCase):
         self.client.login(username="okundumusteri", password="GucluSifre123!")
         response = self.client.get(reverse("my_requests"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(get_total_unread_notifications_count(customer), 0)
+        self.assertGreater(get_total_unread_notifications_count(customer), 0)
 
-    def test_provider_requests_marks_provider_notifications_as_read(self):
+    def test_provider_requests_keeps_provider_notifications_unread(self):
         customer = User.objects.create_user(username="okunduustamusteri", password="GucluSifre123!")
         service_request = ServiceRequest.objects.create(
             customer_name="Okundu Usta Musteri",
@@ -2627,7 +2926,167 @@ class MarketplaceTests(TestCase):
         self.client.login(username="aliusta", password="GucluSifre123!")
         response = self.client.get(reverse("provider_requests"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), 0)
+        self.assertGreater(get_total_unread_notifications_count(self.provider_user_ali), 0)
+
+    def test_notifications_mark_entry_read_marks_only_selected_workflow_entry(self):
+        customer = User.objects.create_user(username="tekilbildirimmusteri", password="GucluSifre123!")
+        first_request = ServiceRequest.objects.create(
+            customer_name="Tekil Bildirim Musteri 1",
+            customer_phone="05003334457",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Tekil bildirim birinci olay",
+            customer=customer,
+            status="pending_provider",
+        )
+        second_request = ServiceRequest.objects.create(
+            customer_name="Tekil Bildirim Musteri 2",
+            customer_phone="05003334458",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Tekil bildirim ikinci olay",
+            customer=customer,
+            status="pending_provider",
+        )
+        ProviderOffer.objects.create(
+            service_request=first_request,
+            provider=self.provider_ali,
+            token="READONE1",
+            sequence=1,
+            status="pending",
+        )
+        ProviderOffer.objects.create(
+            service_request=second_request,
+            provider=self.provider_ali,
+            token="READONE2",
+            sequence=1,
+            status="pending",
+        )
+        first_event = WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=first_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Ilk workflow bildirimi",
+        )
+        WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=second_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Ikinci workflow bildirimi",
+        )
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.post(
+            reverse("notifications_mark_entry_read", args=[f"wf-{first_event.id}"]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["unread_notifications_count"], 1)
+        self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), 1)
+        self.assertTrue(
+            WorkflowEventRead.objects.filter(user=self.provider_user_ali, workflow_event=first_event).exists()
+        )
+
+    def test_my_requests_partial_returns_html_without_marking_notifications_read(self):
+        customer = User.objects.create_user(username="partialmusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Partial Musteri",
+            customer_phone="05006667789",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Partial taleplerim testi",
+            customer=customer,
+            status="pending_customer",
+        )
+        offer = ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="READCUST2",
+            sequence=1,
+            status="accepted",
+        )
+        service_request.matched_provider = self.provider_ali
+        service_request.matched_offer = offer
+        service_request.status = "matched"
+        service_request.save(update_fields=["matched_provider", "matched_offer", "status"])
+        ServiceMessage.objects.create(
+            service_request=service_request,
+            sender_user=self.provider_user_ali,
+            sender_role="provider",
+            body="Partial musteri icin okunmamis mesaj",
+        )
+
+        unread_before = get_total_unread_notifications_count(customer)
+        self.assertGreater(unread_before, 0)
+
+        self.client.login(username="partialmusteri", password="GucluSifre123!")
+        response = self.client.get(
+            reverse("my_requests") + "?partial=panel",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn(service_request.display_code, payload["html"])
+        self.assertIn("S\u0131radaki aksiyon", payload["html"])
+        self.assertEqual(get_total_unread_notifications_count(customer), unread_before)
+
+    def test_provider_requests_partial_returns_html_without_marking_notifications_read(self):
+        customer = User.objects.create_user(username="partialustamusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Partial Usta Musteri",
+            customer_phone="05003334456",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Partial usta panel testi",
+            customer=customer,
+            status="pending_provider",
+        )
+        ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="READPROV2",
+            sequence=1,
+            status="pending",
+        )
+        WorkflowEvent.objects.create(
+            target_type="request",
+            service_request=service_request,
+            from_status="new",
+            to_status="pending_provider",
+            actor_user=customer,
+            actor_role="customer",
+            source="user",
+            note="Partial usta panel bildirimi",
+        )
+
+        unread_before = get_total_unread_notifications_count(self.provider_user_ali)
+        self.assertGreater(unread_before, 0)
+
+        self.client.login(username="aliusta", password="GucluSifre123!")
+        response = self.client.get(
+            reverse("provider_requests") + "?partial=panel",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn(service_request.display_code, payload["html"])
+        self.assertIn("S\u0131radaki aksiyon", payload["html"])
+        self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), unread_before)
 
     def test_notifications_unread_count_endpoint_reflects_read_state(self):
         customer = User.objects.create_user(username="sayacmusteri", password="GucluSifre123!")
@@ -2664,7 +3123,7 @@ class MarketplaceTests(TestCase):
         self.assertEqual(before_response.status_code, 200)
         self.assertGreaterEqual(before_response.json().get("unread_notifications_count", 0), 1)
 
-        self.client.get(reverse("notifications"))
+        self.client.post(reverse("notifications_mark_all_read"))
 
         after_response = self.client.get(reverse("notifications_unread_count"))
         self.assertEqual(after_response.status_code, 200)
@@ -2807,6 +3266,7 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Hesap Bilgileri")
         self.assertContains(response, "İletişim ve Konum Bilgileri")
+        self.assertContains(response, "Bildirimler")
         self.assertContains(response, "Güvenlik")
 
     def test_provider_account_settings_page_hides_contact_section(self):
@@ -2815,6 +3275,27 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "İletişim ve Konum Bilgileri")
         self.assertContains(response, "Usta Profili")
+
+    def test_customer_can_update_notification_preferences_from_account_settings(self):
+        customer = User.objects.create_user(username="bildirimayarli", password="GucluSifre123!")
+        CustomerProfile.objects.create(user=customer, phone="05001112234", city="Lefkosa", district="Ortakoy")
+        cursor = NotificationCursor.objects.create(user=customer)
+        self.client.login(username="bildirimayarli", password="GucluSifre123!")
+
+        response = self.client.post(
+            reverse("account_settings"),
+            data={
+                "form_action": "notifications",
+                "notifications-allow_message_notifications": "on",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        cursor.refresh_from_db()
+        self.assertTrue(cursor.allow_message_notifications)
+        self.assertFalse(cursor.allow_request_notifications)
+        self.assertFalse(cursor.allow_appointment_notifications)
     def test_customer_can_update_identity_from_account_settings(self):
         customer = User.objects.create_user(username="kimlikeski", password="GucluSifre123!")
         CustomerProfile.objects.create(user=customer, phone="05001112233", city="Lefkosa", district="Ortakoy")

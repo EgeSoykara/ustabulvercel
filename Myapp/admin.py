@@ -23,6 +23,7 @@ from .models import (
     ServiceRequest,
     ServiceType,
     WorkflowEvent,
+    WorkflowEventRead,
 )
 
 
@@ -371,13 +372,56 @@ class SchedulerHeartbeatAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationCursor)
 class NotificationCursorAdmin(admin.ModelAdmin):
-    list_display = ("user", "workflow_seen_at", "updated_at")
+    list_display = (
+        "user",
+        "allow_message_notifications",
+        "allow_request_notifications",
+        "allow_appointment_notifications",
+        "workflow_seen_at",
+        "updated_at",
+    )
     search_fields = ("user__username",)
     ordering = ("-updated_at",)
     readonly_fields = ("user", "workflow_seen_at", "created_at", "updated_at")
+    list_filter = (
+        "allow_message_notifications",
+        "allow_request_notifications",
+        "allow_appointment_notifications",
+        "updated_at",
+    )
+
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "user",
+                    "allow_message_notifications",
+                    "allow_request_notifications",
+                    "allow_appointment_notifications",
+                    "workflow_seen_at",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(WorkflowEventRead)
+class WorkflowEventReadAdmin(admin.ModelAdmin):
+    list_display = ("user", "workflow_event", "read_at")
+    list_filter = ("read_at", "workflow_event__target_type")
+    search_fields = (
+        "user__username",
+        "workflow_event__service_request__request_code",
+        "workflow_event__note",
+    )
+    ordering = ("-read_at", "-id")
+    autocomplete_fields = ("user", "workflow_event")
 
 
 @admin.register(MobileDevice)

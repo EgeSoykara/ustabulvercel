@@ -315,7 +315,6 @@
       ? "{% url 'provider_panel_snapshot' %}"
       : "{% url 'customer_requests_snapshot' %}";
     const notificationsCountUrl = "{% url 'notifications_unread_count' %}";
-    const notificationsPath = "{% url 'notifications' %}";
     const panelPath = isProvider ? "{% url 'provider_requests' %}" : "{% url 'my_requests' %}";
     const streamUrl = "{% url 'nav_live_stream' %}";
     const navSelector = isProvider ? "[data-live-provider-nav]" : "[data-live-customer-nav]";
@@ -379,9 +378,9 @@
       renderNavBadge(safeValue);
     }
 
-    function shouldResetNavBadge() {
+    function shouldResetPanelBadge() {
       const currentPath = window.location.pathname || "";
-      return currentPath === notificationsPath || currentPath === panelPath;
+      return currentPath === panelPath;
     }
 
     function readSnapshot() {
@@ -499,7 +498,7 @@
         ? getProviderIncrement(previousSnapshot, nextSnapshot)
         : getCustomerIncrement(previousSnapshot, nextSnapshot);
       const unreadNotificationsCount = Number(payload.unread_notifications_count || 0);
-      if (shouldResetNavBadge()) {
+      if (shouldResetPanelBadge()) {
         writeBadgeCount(0);
       } else if (increment > 0) {
         writeBadgeCount(readBadgeCount() + increment);
@@ -623,13 +622,16 @@
       }
     });
 
-    window.addEventListener("ustabul:notifications-read", function () {
-      renderNotificationBadge(0);
-      writeBadgeCount(0);
+    window.addEventListener("ustabul:notifications-read", function (event) {
+      const unreadCount = Number(event && event.detail ? event.detail.unreadCount : NaN);
+      if (Number.isFinite(unreadCount) && unreadCount >= 0) {
+        renderNotificationBadge(unreadCount);
+      } else {
+        syncNotificationBadge();
+      }
     });
 
-    if (shouldResetNavBadge()) {
-      renderNotificationBadge(0);
+    if (shouldResetPanelBadge()) {
       writeBadgeCount(0);
     }
     renderNavBadge(readBadgeCount());

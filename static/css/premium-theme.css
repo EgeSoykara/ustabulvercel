@@ -544,6 +544,190 @@ input:not([type="checkbox"]):not([type="radio"]):focus {
   font-size: 0.8rem;
 }
 
+.request-card-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.request-card-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--premium-border) 84%, var(--line));
+  background: color-mix(in srgb, var(--premium-surface-strong) 88%, transparent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.request-flow-step {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--premium-ring) 24%, transparent);
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.request-change-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.request-change-badge.tone-danger {
+  color: #991b1b;
+  background: rgba(252, 165, 165, 0.3);
+}
+
+.request-change-badge.tone-warning {
+  color: #9a3412;
+  background: rgba(253, 186, 116, 0.3);
+}
+
+.request-change-badge.tone-info {
+  color: #0f766e;
+  background: rgba(153, 246, 228, 0.3);
+}
+
+.request-change-badge.tone-success {
+  color: #166534;
+  background: rgba(134, 239, 172, 0.3);
+}
+
+.request-change-badge.tone-muted {
+  color: #475569;
+  background: rgba(226, 232, 240, 0.72);
+}
+
+.panel-card-highlight {
+  border-color: rgba(245, 158, 11, 0.56) !important;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.18), 0 18px 34px rgba(15, 23, 42, 0.08);
+  animation: requestHighlightPulse 2.8s ease-out 1;
+}
+
+@keyframes requestHighlightPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.36);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(251, 191, 36, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+.request-flow-card {
+  display: grid;
+  gap: 0.32rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--premium-border) 76%, var(--line));
+  background: color-mix(in srgb, var(--premium-surface-strong) 92%, transparent);
+  padding: 0.8rem 0.9rem;
+}
+
+.request-flow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.request-flow-head strong {
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.request-flow-card .small {
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.request-flow-card.tone-waiting {
+  border-color: rgba(14, 116, 144, 0.3);
+  background: rgba(125, 211, 252, 0.16);
+}
+
+.request-flow-card.tone-action {
+  border-color: rgba(249, 115, 22, 0.32);
+  background: rgba(253, 186, 116, 0.18);
+}
+
+.request-flow-card.tone-success {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(134, 239, 172, 0.18);
+}
+
+.request-flow-card.tone-danger {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(252, 165, 165, 0.18);
+}
+
+.request-flow-card.tone-muted {
+  border-color: rgba(148, 163, 184, 0.32);
+  background: rgba(226, 232, 240, 0.38);
+}
+
+[data-theme="dark"] .request-card-code {
+  background: rgba(15, 23, 42, 0.82);
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .request-flow-step {
+  background: rgba(56, 189, 248, 0.16);
+  color: #cbd5e1;
+}
+
+[data-theme="dark"] .request-change-badge.tone-danger {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.62);
+}
+
+[data-theme="dark"] .request-change-badge.tone-warning {
+  color: #fed7aa;
+  background: rgba(124, 45, 18, 0.62);
+}
+
+[data-theme="dark"] .request-change-badge.tone-info {
+  color: #ccfbf1;
+  background: rgba(19, 78, 74, 0.62);
+}
+
+[data-theme="dark"] .request-change-badge.tone-success {
+  color: #bbf7d0;
+  background: rgba(20, 83, 45, 0.62);
+}
+
+[data-theme="dark"] .request-change-badge.tone-muted {
+  color: #e2e8f0;
+  background: rgba(51, 65, 85, 0.82);
+}
+
+[data-theme="dark"] .request-flow-card {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+[data-theme="dark"] .request-flow-card .small,
+[data-theme="dark"] .request-flow-head strong {
+  color: #e2e8f0;
+}
+
 @media (max-width: 991px) {
   .site-nav:hover,
   .panel-card:hover {

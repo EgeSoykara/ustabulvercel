@@ -11,6 +11,7 @@ from django.utils import timezone
 from .constants import NC_CITY_CHOICES, NC_CITY_DISTRICT_MAP, NC_DISTRICT_CHOICES
 from .models import (
     CustomerProfile,
+    NotificationCursor,
     Provider,
     ProviderAvailabilitySlot,
     ProviderRating,
@@ -718,6 +719,31 @@ class CustomerContactSettingsForm(forms.ModelForm):
         cleaned_data["city"] = city_key
         cleaned_data["district"] = resolved_district
         return cleaned_data
+
+
+class NotificationPreferenceForm(forms.ModelForm):
+    class Meta:
+        model = NotificationCursor
+        fields = [
+            "allow_message_notifications",
+            "allow_request_notifications",
+            "allow_appointment_notifications",
+        ]
+        labels = {
+            "allow_message_notifications": "Mesaj bildirimleri",
+            "allow_request_notifications": "Talep durumu bildirimleri",
+            "allow_appointment_notifications": "Randevu bildirimleri",
+        }
+        help_texts = {
+            "allow_message_notifications": "Yeni mesajlar için bildirim ve rozet göster.",
+            "allow_request_notifications": "Teklif, eşleşme ve talep durum güncellemelerini göster.",
+            "allow_appointment_notifications": "Randevu oluşturma, onay ve tamamlama güncellemelerini göster.",
+        }
+        widgets = {
+            "allow_message_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "allow_request_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "allow_appointment_notifications": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 
 class ProviderContactSettingsForm(forms.ModelForm):

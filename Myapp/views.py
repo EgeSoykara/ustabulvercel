@@ -18,6 +18,7 @@ from django.db.models import Count, Max, Q
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -32,6 +33,7 @@ from .forms import (
     CustomerContactSettingsForm,
     CustomerLoginForm,
     CustomerSignupForm,
+    NotificationPreferenceForm,
     ProviderAvailabilitySlotForm,
     ProviderProfileForm,
     ProviderLoginForm,
@@ -42,11 +44,17 @@ from .forms import (
     ServiceMessageForm,
 )
 from .notifications import (
+    build_notification_sections,
     build_notification_entries,
+    get_notification_cursor,
+    get_notification_preferences,
     get_notification_retention_days,
     get_total_unread_notifications_count,
     invalidate_unread_notifications_cache,
     mark_all_notifications_read,
+    mark_notification_entry_read,
+    normalize_notification_category,
+    resolve_notification_entry,
 )
 from .models import (
     ActivityLog,
@@ -121,6 +129,19 @@ def build_page_query_suffix(request, page_param):
     params.pop(page_param, None)
     encoded = params.urlencode()
     return f"&{encoded}" if encoded else ""
+
+
+def build_query_url(request, *, updates=None, remove=None):
+    params = request.GET.copy()
+    for key in remove or []:
+        params.pop(key, None)
+    for key, value in (updates or {}).items():
+        if value in (None, "", False):
+            params.pop(key, None)
+            continue
+        params[key] = value
+    encoded = params.urlencode()
+    return f"{request.path}?{encoded}" if encoded else request.path
 
 
 def get_request_display_code(service_request):
@@ -417,7 +438,7 @@ def evaluate_appointment_cancel_policy(appointment, *, now=None):
                 "No-show politikasi: Randevu saatinden sonra uzun gecikmeli iptaller no-show olarak kaydedilir."
             ),
             "result_message": (
-                "Randevu iptal edildi. Bu islem no-show politikasi kapsaminda kayit altina alindi."
+                "Randevu iptal edildi. Bu işlem no-show politikası kapsamında kayıt altına alındı."
             ),
             "workflow_suffix": f"No-show kaydi (randevu saatinden {abs(minutes_to_start)} dk sonra iptal).",
         }
@@ -1234,6 +1255,85 @@ def build_unread_message_map(service_request_ids, viewer_role):
     return {row["service_request_id"]: row["total"] for row in unread_rows}
 
 
+def build_latest_incoming_message_map(service_request_ids, viewer_role):
+    if not service_request_ids:
+        return {}
+    latest_map = {}
+    message_rows = (
+        ServiceMessage.objects.filter(service_request_id__in=service_request_ids)
+        .exclude(sender_role=viewer_role)
+        .order_by("-created_at", "-id")
+    )
+    for row in message_rows:
+        if row.service_request_id not in latest_map:
+            latest_map[row.service_request_id] = row
+    return latest_map
+
+
+def build_latest_workflow_event_map(service_request_ids, actor_user):
+    if not service_request_ids:
+        return {}
+    latest_map = {}
+    event_rows = (
+        WorkflowEvent.objects.filter(
+            Q(service_request_id__in=service_request_ids)
+            | Q(appointment__service_request_id__in=service_request_ids)
+        )
+        .exclude(actor_user=actor_user)
+        .select_related("appointment")
+        .order_by("-created_at", "-id")
+    )
+    for row in event_rows:
+        service_request_id = row.service_request_id or getattr(row.appointment, "service_request_id", None)
+        if service_request_id and service_request_id not in latest_map:
+            latest_map[service_request_id] = row
+    return latest_map
+
+
+def build_recent_change_from_event(event):
+    if not event:
+        return None
+
+    if event.target_type == "appointment":
+        if event.to_status == "pending":
+            return {"label": "Randevu talebi", "tone": "warning"}
+        if event.to_status in {"pending_customer", "confirmed"}:
+            return {"label": "Randevu güncellendi", "tone": "info"}
+        if event.to_status in {"cancelled", "rejected"}:
+            return {"label": "Randevu iptal edildi", "tone": "danger"}
+        if event.to_status == "completed":
+            return {"label": "Randevu tamamlandı", "tone": "success"}
+        return {"label": "Randevu güncellendi", "tone": "info"}
+
+    if event.to_status == "pending_provider":
+        return {"label": "Yeni talep", "tone": "warning"}
+    if event.to_status == "pending_customer":
+        return {"label": "Teklif kabul edildi", "tone": "info"}
+    if event.to_status == "matched":
+        return {"label": "Eşleşme tamamlandı", "tone": "success"}
+    if event.to_status == "completed":
+        return {"label": "İş tamamlandı", "tone": "success"}
+    if event.to_status == "cancelled":
+        return {"label": "Talep iptal edildi", "tone": "danger"}
+    return {"label": "Talep güncellendi", "tone": "info"}
+
+
+def assign_recent_change_state(target, latest_message=None, latest_event=None):
+    if latest_message and (not latest_event or latest_message.created_at >= latest_event.created_at):
+        target.recent_change_label = "Yeni mesaj"
+        target.recent_change_tone = "danger"
+        return
+
+    event_change = build_recent_change_from_event(latest_event)
+    if event_change:
+        target.recent_change_label = event_change["label"]
+        target.recent_change_tone = event_change["tone"]
+        return
+
+    target.recent_change_label = ""
+    target.recent_change_tone = "muted"
+
+
 def get_customer_snapshot_cache_seconds():
     return max(1, int(getattr(settings, "CUSTOMER_SNAPSHOT_CACHE_SECONDS", 3)))
 
@@ -1594,6 +1694,122 @@ def build_customer_flow_state(service_request, appointment, *, has_accepted_offe
         }
 
     return flow
+
+
+def build_provider_pending_offer_flow_state():
+    return {
+        "step": "Adım 1/4",
+        "title": "Talep kararınız bekleniyor",
+        "hint": "Bu talep size iletildi ve müşteri yanıtınızı bekliyor.",
+        "next_action": "Talebi onaylayın veya reddedin.",
+        "tone": "action",
+    }
+
+
+def build_provider_waiting_selection_flow_state():
+    return {
+        "step": "Adım 2/4",
+        "title": "Müşteri seçimi bekleniyor",
+        "hint": "Teklifiniz müşteriye ulaştı.",
+        "next_action": "Müşteri karar verdiğinde iş aktif işlere taşınır.",
+        "tone": "waiting",
+    }
+
+
+def build_provider_thread_flow_state(appointment, *, calendar_enabled):
+    if not calendar_enabled:
+        return {
+            "step": "Adım 3/3",
+            "title": "Mesajlaşma aktif",
+            "hint": "Müşteri ile detayları mesajlardan netleştirebilirsiniz.",
+            "next_action": "İş bitince tamamlandı olarak işaretleyin.",
+            "tone": "action",
+        }
+
+    if appointment is None:
+        return {
+            "step": "Adım 3/4",
+            "title": "Randevu saati bekleniyor",
+            "hint": "Müşteri henüz bir saat seçmedi.",
+            "next_action": "Müşterinin randevu oluşturmasını bekleyin.",
+            "tone": "waiting",
+        }
+
+    appointment_status = appointment.status
+    if appointment_status in {"rejected", "cancelled"}:
+        return {
+            "step": "Adım 3/4",
+            "title": "Yeni randevu saati bekleniyor",
+            "hint": "Mevcut randevu aktif değil.",
+            "next_action": "Müşterinin yeni bir randevu oluşturması gerekiyor.",
+            "tone": "danger",
+        }
+    if appointment_status == "pending":
+        return {
+            "step": "Adım 4/4",
+            "title": "Randevu onayınız bekleniyor",
+            "hint": "Müşteri saat seçimini yaptı.",
+            "next_action": "Bekleyen randevular bölümünden onaylayın veya reddedin.",
+            "tone": "action",
+        }
+    if appointment_status in {"pending_customer", "confirmed"}:
+        return {
+            "step": "Adım 4/4",
+            "title": "Randevu onaylandı",
+            "hint": "Planlanan ziyaret saati netleşti.",
+            "next_action": "İş bittiğinde tamamlandı olarak işaretleyin.",
+            "tone": "success",
+        }
+    if appointment_status == "completed":
+        return {
+            "step": "Tamamlandı",
+            "title": "Randevu tamamlandı",
+            "hint": "Bu iş için randevu süreci kapandı.",
+            "next_action": "Gerekirse mesajlar üzerinden son notları takip edin.",
+            "tone": "muted",
+        }
+    return {
+        "step": "Aktif",
+        "title": "Mesajlaşma aktif",
+        "hint": "Durumu mesajlardan takip edebilirsiniz.",
+        "next_action": "Gerekirse müşteriye yazın.",
+        "tone": "action",
+    }
+
+
+def build_provider_pending_appointment_flow_state():
+    return {
+        "step": "Adım 4/4",
+        "title": "Randevu onayı bekleniyor",
+        "hint": "Müşteri saati belirledi ve yanıtınızı bekliyor.",
+        "next_action": "Randevuyu onaylayın veya reddedin.",
+        "tone": "action",
+    }
+
+
+def is_panel_partial_request(request):
+    return (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        and (request.GET.get("partial") or "").strip() == "panel"
+    )
+
+
+def build_panel_partial_url(request):
+    params = request.GET.copy()
+    params["partial"] = "panel"
+    return f"{request.path}?{params.urlencode()}"
+
+
+def render_panel_partial_response(request, *, template_name, context, snapshot):
+    html = render_to_string(template_name, context=context, request=request)
+    response = JsonResponse(
+        {
+            "html": html,
+            "snapshot": snapshot,
+        }
+    )
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 def purge_request_messages(service_request_id):
@@ -2561,7 +2777,7 @@ def request_messages(request, request_id):
                 actor_user=request.user,
                 actor_role=viewer_role,
                 source="user",
-                summary=f"Talep {get_request_display_code(service_request)} icin yeni mesaj",
+                summary=f"Talep {get_request_display_code(service_request)} için yeni mesaj",
                 note=message_item.body,
             )
             publish_service_message_event(message_item)
@@ -2646,14 +2862,64 @@ def request_messages_snapshot(request, request_id):
 @login_required
 @never_cache
 def notifications_view(request):
-    # Opening the notifications page should behave like "mark all as read".
-    mark_all_notifications_read(request.user)
-    entries = build_notification_entries(request.user, limit=250)
-    for entry in entries:
-        entry["is_unread"] = False
-    page_obj = paginate_items(request, entries, per_page=20, page_param="page")
+    retention_days = get_notification_retention_days()
+    selected_category = normalize_notification_category(request.GET.get("category"))
+    unread_only = str(request.GET.get("unread") or "").strip().lower() in {"1", "true", "on", "yes"}
+    selected_days = str(request.GET.get("days") or "").strip().lower()
+    default_days_key = str(retention_days) if str(retention_days) in {"30", "60", "90"} else "all"
+    if selected_days not in {"30", "60", "90", "all"}:
+        selected_days = default_days_key
+
+    include_all = selected_days == "all"
+    filter_days = None if include_all else int(selected_days)
+    entries = build_notification_entries(
+        request.user,
+        limit=500,
+        days=filter_days,
+        include_all=include_all,
+    )
+    category_filtered_entries = entries
+    if selected_category != "all":
+        category_filtered_entries = [item for item in category_filtered_entries if item.get("category_key") == selected_category]
+    if unread_only:
+        category_filtered_entries = [item for item in category_filtered_entries if item.get("is_unread")]
+
+    category_count_source = entries if not unread_only else [item for item in entries if item.get("is_unread")]
+    category_counts = {
+        "all": len(category_count_source),
+        "message": sum(1 for item in category_count_source if item.get("category_key") == "message"),
+        "request": sum(1 for item in category_count_source if item.get("category_key") == "request"),
+        "appointment": sum(1 for item in category_count_source if item.get("category_key") == "appointment"),
+    }
+
+    notification_category_filters = []
+    for category_key, label in (
+        ("all", "Tümü"),
+        ("message", "Mesaj"),
+        ("request", "Talep"),
+        ("appointment", "Randevu"),
+    ):
+        notification_category_filters.append(
+            {
+                "value": category_key,
+                "label": label,
+                "count": category_counts.get(category_key, 0),
+                "is_active": selected_category == category_key,
+                "url": build_query_url(request, updates={"category": category_key}),
+            }
+        )
+
+    notifications_page_query = build_page_query_suffix(request, "page")
+    page_obj = paginate_items(request, category_filtered_entries, per_page=20, page_param="page")
     page_entries = list(page_obj.object_list)
-    unread_count = 0
+    unread_count = get_total_unread_notifications_count(request.user)
+    notification_cursor = get_notification_cursor(request.user, create=True)
+    notification_preferences = get_notification_preferences(cursor=notification_cursor)
+    disabled_categories = [
+        filter_item["label"]
+        for filter_item in notification_category_filters
+        if filter_item["value"] != "all" and not notification_preferences.get(filter_item["value"], True)
+    ]
 
     return render(
         request,
@@ -2661,8 +2927,15 @@ def notifications_view(request):
         {
             "notifications_page_obj": page_obj,
             "notification_entries": page_entries,
+            "notification_sections": build_notification_sections(page_entries),
             "notifications_unread_count": unread_count,
-            "notifications_retention_days": get_notification_retention_days(),
+            "notifications_retention_days": retention_days,
+            "notifications_page_query": notifications_page_query,
+            "notification_category_filters": notification_category_filters,
+            "selected_notification_category": selected_category,
+            "notifications_unread_only": unread_only,
+            "selected_notification_days": selected_days,
+            "disabled_notification_categories": disabled_categories,
         },
     )
 
@@ -2670,10 +2943,51 @@ def notifications_view(request):
 @login_required
 @require_POST
 def notifications_mark_all_read(request):
-    mark_all_notifications_read(request.user)
+    result = mark_all_notifications_read(request.user)
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JsonResponse({"ok": True})
+        return JsonResponse(
+            {
+                "ok": True,
+                "marked_count": result["message_count"] + result["workflow_count"],
+                "unread_notifications_count": result["unread_notifications_count"],
+            }
+        )
     return redirect("notifications")
+
+
+@login_required
+@require_POST
+def notifications_mark_entry_read(request, entry_id):
+    result = mark_notification_entry_read(request.user, entry_id)
+    if not result:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": False}, status=404)
+        messages.error(request, "Bildirim bulunamadı veya size ait değil.")
+        return redirect("notifications")
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse(
+            {
+                "ok": True,
+                "entry_id": result["entry_id"],
+                "marked": result["marked"],
+                "unread_notifications_count": result["unread_notifications_count"],
+            }
+        )
+
+    return redirect(request.POST.get("next") or "notifications")
+
+
+@login_required
+@never_cache
+def notifications_open_entry(request, entry_id):
+    entry = resolve_notification_entry(request.user, entry_id)
+    if not entry:
+        messages.error(request, "Bildirim bulunamadı veya size ait değil.")
+        return redirect("notifications")
+
+    mark_notification_entry_read(request.user, entry_id)
+    return redirect(entry["link"])
 
 
 @login_required
@@ -2843,15 +3157,12 @@ def operations_dashboard(request):
             "scheduler_stale_after_seconds": stale_after_seconds,
         },
     )
-@login_required
-def my_requests(request):
-    refresh_marketplace_lifecycle()
-    if get_provider_for_user(request.user):
-        messages.error(request, "Bu alan sadece müşteri hesapları içindir.")
-        return redirect("provider_requests")
-    # Treat opening the customer request panel as acknowledgment of incoming notifications.
-    mark_all_notifications_read(request.user)
+
+
+def build_customer_panel_context(request):
     calendar_enabled = is_calendar_enabled()
+    highlight_request_raw = str(request.GET.get("highlight_request") or "").strip()
+    highlight_request_id = int(highlight_request_raw) if highlight_request_raw.isdigit() else None
 
     requests_qs = request.user.service_requests.select_related(
         "service_type",
@@ -2885,11 +3196,14 @@ def my_requests(request):
             ).values_list("service_request_id", flat=True)
         )
     unread_message_map = build_unread_message_map(request_ids, "customer")
+    latest_message_map = build_latest_incoming_message_map(request_ids, "customer")
+    latest_workflow_event_map = build_latest_workflow_event_map(request_ids, request.user)
     now = timezone.now()
     pending_selection_items = []
     for item in requests:
         item.rating_entry = rating_map.get(item.id)
         item.appointment_entry = appointment_map.get(item.id)
+        item.is_highlighted = highlight_request_id == item.id
         item.cancel_policy_note = ""
         item.cancel_policy_tone = "muted"
         if calendar_enabled and item.appointment_entry and item.appointment_entry.status in {"pending_customer", "confirmed"}:
@@ -2961,6 +3275,11 @@ def my_requests(request):
         item.flow_hint = flow_state["hint"]
         item.flow_next_action = flow_state["next_action"]
         item.flow_tone = flow_state["tone"]
+        assign_recent_change_state(
+            item,
+            latest_message=latest_message_map.get(item.id),
+            latest_event=latest_workflow_event_map.get(item.id),
+        )
         if item.status == "pending_customer":
             pending_selection_items.append(item)
     cancelled_count = requests_qs.filter(status="cancelled").count()
@@ -2978,21 +3297,34 @@ def my_requests(request):
         "waiting_provider_appointment_count": waiting_provider_appointment_count,
     }
     customer_snapshot = build_customer_snapshot_payload(request.user)
-    return render(
-        request,
-        "Myapp/my_requests.html",
-        {
-            "requests": requests,
-            "requests_page_obj": requests_page_obj,
-            "cancelled_count": cancelled_count,
-            "customer_requests_signature": customer_snapshot["signature"],
-            "customer_snapshot": customer_snapshot,
-            "customer_flow_summary": customer_flow_summary,
-            "pending_selection_items": pending_selection_items,
-            "appointment_min_lead_minutes": get_appointment_min_lead_minutes() if calendar_enabled else 0,
-            "calendar_enabled": calendar_enabled,
-        },
-    )
+    return {
+        "requests": requests,
+        "requests_page_obj": requests_page_obj,
+        "cancelled_count": cancelled_count,
+        "customer_requests_signature": customer_snapshot["signature"],
+        "customer_snapshot": customer_snapshot,
+        "customer_flow_summary": customer_flow_summary,
+        "pending_selection_items": pending_selection_items,
+        "appointment_min_lead_minutes": get_appointment_min_lead_minutes() if calendar_enabled else 0,
+        "calendar_enabled": calendar_enabled,
+        "customer_panel_partial_url": build_panel_partial_url(request),
+    }
+@login_required
+def my_requests(request):
+    refresh_marketplace_lifecycle()
+    if get_provider_for_user(request.user):
+        messages.error(request, "Bu alan sadece müşteri hesapları içindir.")
+        return redirect("provider_requests")
+    is_partial = is_panel_partial_request(request)
+    context = build_customer_panel_context(request)
+    if is_partial:
+        return render_panel_partial_response(
+            request,
+            template_name="Myapp/partials/customer_panel_content.html",
+            context=context,
+            snapshot=context["customer_snapshot"],
+        )
+    return render(request, "Myapp/my_requests.html", context)
 
 
 @login_required
@@ -3062,10 +3394,11 @@ def account_settings(request):
     customer_profile = None
     if not provider:
         customer_profile, _ = CustomerProfile.objects.get_or_create(user=request.user)
+    notification_cursor = get_notification_cursor(request.user, create=True)
 
     allow_contact_tab = not bool(provider)
     active_tab = request.GET.get("tab") or "identity"
-    allowed_tabs = {"identity", "security", "danger"}
+    allowed_tabs = {"identity", "notifications", "security", "danger"}
     if allow_contact_tab:
         allowed_tabs.add("contact")
     if active_tab not in allowed_tabs:
@@ -3073,6 +3406,7 @@ def account_settings(request):
 
     identity_form = AccountIdentityForm(instance=request.user, prefix="identity")
     contact_form = CustomerContactSettingsForm(instance=customer_profile, prefix="contact") if allow_contact_tab else None
+    notification_form = NotificationPreferenceForm(instance=notification_cursor, prefix="notifications")
     password_form = AccountPasswordChangeForm(user=request.user, prefix="password")
 
     if request.method == "POST":
@@ -3094,6 +3428,18 @@ def account_settings(request):
                 contact_form.save()
                 messages.success(request, "İletişim bilgileriniz güncellendi.")
                 return redirect("account_settings")
+        elif action == "notifications":
+            active_tab = "notifications"
+            notification_form = NotificationPreferenceForm(
+                request.POST,
+                instance=notification_cursor,
+                prefix="notifications",
+            )
+            if notification_form.is_valid():
+                notification_form.save()
+                invalidate_unread_notifications_cache(request.user)
+                messages.success(request, "Bildirim tercihleriniz güncellendi.")
+                return redirect(f"{reverse('account_settings')}?tab=notifications")
         elif action == "security":
             active_tab = "security"
             password_form = AccountPasswordChangeForm(user=request.user, data=request.POST, prefix="password")
@@ -3112,6 +3458,7 @@ def account_settings(request):
             "is_provider_user": bool(provider),
             "identity_form": identity_form,
             "contact_form": contact_form,
+            "notification_form": notification_form,
             "password_form": password_form,
             "active_tab": active_tab,
             "allow_contact_tab": allow_contact_tab,
@@ -3671,15 +4018,12 @@ def select_provider_offer(request, request_id, offer_id):
     )
     return redirect("my_requests")
 
-@login_required
-def provider_requests(request):
-    refresh_marketplace_lifecycle()
-    provider, blocked_response = get_verified_provider_or_redirect(request)
-    if blocked_response:
-        return blocked_response
-    # Treat opening the provider panel as acknowledgment of incoming notifications.
-    mark_all_notifications_read(request.user)
+def build_provider_panel_context(request, provider):
     calendar_enabled = is_calendar_enabled()
+    highlight_request_raw = str(request.GET.get("highlight_request") or "").strip()
+    highlight_request_id = int(highlight_request_raw) if highlight_request_raw.isdigit() else None
+    highlight_appointment_raw = str(request.GET.get("highlight_appointment") or "").strip()
+    highlight_appointment_id = int(highlight_appointment_raw) if highlight_appointment_raw.isdigit() else None
 
     pending_offers_qs = (
         provider.offers.filter(status="pending")
@@ -3690,6 +4034,14 @@ def provider_requests(request):
     latest_pending_offer_id = pending_offers_qs.values_list("id", flat=True).first() or 0
     pending_offers_page_obj = paginate_items(request, pending_offers_qs, per_page=10, page_param="pending_offer_page")
     pending_offers = list(pending_offers_page_obj.object_list)
+    for offer in pending_offers:
+        flow_state = build_provider_pending_offer_flow_state()
+        offer.flow_step = flow_state["step"]
+        offer.flow_title = flow_state["title"]
+        offer.flow_hint = flow_state["hint"]
+        offer.flow_next_action = flow_state["next_action"]
+        offer.flow_tone = flow_state["tone"]
+
     waiting_customer_selection_qs = (
         provider.offers.filter(
             status="accepted",
@@ -3707,6 +4059,14 @@ def provider_requests(request):
         page_param="waiting_selection_page",
     )
     waiting_customer_selection_offers = list(waiting_customer_selection_page_obj.object_list)
+    for offer in waiting_customer_selection_offers:
+        flow_state = build_provider_waiting_selection_flow_state()
+        offer.flow_step = flow_state["step"]
+        offer.flow_title = flow_state["title"]
+        offer.flow_hint = flow_state["hint"]
+        offer.flow_next_action = flow_state["next_action"]
+        offer.flow_tone = flow_state["tone"]
+
     recent_offers_qs = (
         provider.offers.exclude(status="pending")
         .select_related("service_request", "service_request__service_type")
@@ -3728,6 +4088,14 @@ def provider_requests(request):
             page_param="pending_appointment_page",
         )
         pending_appointments = list(pending_appointments_page_obj.object_list)
+        for appointment in pending_appointments:
+            flow_state = build_provider_pending_appointment_flow_state()
+            appointment.flow_step = flow_state["step"]
+            appointment.flow_title = flow_state["title"]
+            appointment.flow_hint = flow_state["hint"]
+            appointment.flow_next_action = flow_state["next_action"]
+            appointment.flow_tone = flow_state["tone"]
+
         confirmed_appointments_qs = (
             provider.appointments.filter(status__in=["confirmed", "pending_customer"])
             .select_related("service_request", "service_request__service_type")
@@ -3795,35 +4163,42 @@ def provider_requests(request):
         thread.appointment_feedback_label = "Mesajlasma aktif"
         thread.appointment_feedback_note = "Durumu mesajlardan takip edebilirsiniz."
 
-        if not calendar_enabled:
-            continue
+        if calendar_enabled:
+            appointment = thread.appointment_entry
+            if appointment is None:
+                thread.appointment_feedback_tone = "warning"
+                thread.appointment_feedback_label = "Randevu saati bekleniyor"
+                thread.appointment_feedback_note = "Müşterinin randevu saati seçmesi bekleniyor."
+            else:
+                appointment_status = appointment.status
+                if appointment_status in {"rejected", "cancelled"}:
+                    thread.appointment_feedback_tone = "warning"
+                    thread.appointment_feedback_label = "Yeni randevu saati bekleniyor"
+                    thread.appointment_feedback_note = "Müşterinin yeni bir randevu oluşturması gerekiyor."
+                elif appointment_status == "pending":
+                    thread.appointment_feedback_tone = "action"
+                    thread.appointment_feedback_label = "Randevu onayınız bekleniyor"
+                    thread.appointment_feedback_note = "Müşteri saat seçimini yaptı. Bekleyen Randevu Talepleri bölümünü kontrol edin."
+                elif appointment_status in {"pending_customer", "confirmed"}:
+                    thread.appointment_feedback_tone = "success"
+                    thread.appointment_feedback_label = "Randevu onaylandı"
+                    thread.appointment_feedback_note = "Planlanan saat: " + timezone.localtime(appointment.scheduled_for).strftime(
+                        "%d.%m.%Y %H:%M"
+                    )
+                elif appointment_status == "completed":
+                    thread.appointment_feedback_tone = "success"
+                    thread.appointment_feedback_label = "Randevu tamamlandı"
+                    thread.appointment_feedback_note = "Bu randevu kapatıldı."
 
-        appointment = thread.appointment_entry
-        if appointment is None:
-            thread.appointment_feedback_tone = "warning"
-            thread.appointment_feedback_label = "Randevu saati bekleniyor"
-            thread.appointment_feedback_note = "Müşterinin randevu saati seçmesi bekleniyor."
-            continue
-
-        appointment_status = appointment.status
-        if appointment_status in {"rejected", "cancelled"}:
-            thread.appointment_feedback_tone = "warning"
-            thread.appointment_feedback_label = "Yeni randevu saati bekleniyor"
-            thread.appointment_feedback_note = "Müşterinin yeni bir randevu oluşturması gerekiyor."
-        elif appointment_status == "pending":
-            thread.appointment_feedback_tone = "action"
-            thread.appointment_feedback_label = "Randevu onayınız bekleniyor"
-            thread.appointment_feedback_note = "Müşteri saat seçimini yaptı. Bekleyen Randevu Talepleri bölümünü kontrol edin."
-        elif appointment_status in {"pending_customer", "confirmed"}:
-            thread.appointment_feedback_tone = "success"
-            thread.appointment_feedback_label = "Randevu onaylandı"
-            thread.appointment_feedback_note = "Planlanan saat: " + timezone.localtime(appointment.scheduled_for).strftime(
-                "%d.%m.%Y %H:%M"
-            )
-        elif appointment_status == "completed":
-            thread.appointment_feedback_tone = "success"
-            thread.appointment_feedback_label = "Randevu tamamlandı"
-            thread.appointment_feedback_note = "Bu randevu kapatıldı."
+        flow_state = build_provider_thread_flow_state(
+            thread.appointment_entry,
+            calendar_enabled=calendar_enabled,
+        )
+        thread.flow_step = flow_state["step"]
+        thread.flow_title = flow_state["title"]
+        thread.flow_hint = flow_state["hint"]
+        thread.flow_next_action = flow_state["next_action"]
+        thread.flow_tone = flow_state["tone"]
     total_unread_messages = ServiceMessage.objects.filter(
         service_request__matched_provider=provider,
         service_request__status="matched",
@@ -3843,6 +4218,49 @@ def provider_requests(request):
         confirmed_appointment_page_query = build_page_query_suffix(request, "confirmed_appointment_page")
         recent_appointment_page_query = build_page_query_suffix(request, "recent_appointment_page")
 
+    recent_change_request_ids = set()
+    recent_change_request_ids.update(offer.service_request_id for offer in pending_offers)
+    recent_change_request_ids.update(offer.service_request_id for offer in waiting_customer_selection_offers)
+    recent_change_request_ids.update(thread.id for thread in active_threads)
+    recent_change_request_ids.update(appointment.service_request_id for appointment in pending_appointments)
+    latest_message_map = build_latest_incoming_message_map(list(recent_change_request_ids), "provider")
+    latest_workflow_event_map = build_latest_workflow_event_map(list(recent_change_request_ids), request.user)
+
+    for offer in pending_offers:
+        offer.is_highlighted = highlight_request_id == offer.service_request_id
+        assign_recent_change_state(
+            offer,
+            latest_message=latest_message_map.get(offer.service_request_id),
+            latest_event=latest_workflow_event_map.get(offer.service_request_id),
+        )
+
+    for offer in waiting_customer_selection_offers:
+        offer.is_highlighted = highlight_request_id == offer.service_request_id
+        assign_recent_change_state(
+            offer,
+            latest_message=latest_message_map.get(offer.service_request_id),
+            latest_event=latest_workflow_event_map.get(offer.service_request_id),
+        )
+
+    for thread in active_threads:
+        thread.is_highlighted = highlight_request_id == thread.id
+        assign_recent_change_state(
+            thread,
+            latest_message=latest_message_map.get(thread.id),
+            latest_event=latest_workflow_event_map.get(thread.id),
+        )
+
+    for appointment in pending_appointments:
+        appointment.is_highlighted = (
+            highlight_request_id == appointment.service_request_id
+            or highlight_appointment_id == appointment.id
+        )
+        assign_recent_change_state(
+            appointment,
+            latest_message=latest_message_map.get(appointment.service_request_id),
+            latest_event=latest_workflow_event_map.get(appointment.service_request_id),
+        )
+
     provider_live_snapshot = {
         "signature": build_provider_panel_signature(provider),
         "pending_offers_count": pending_offers_count,
@@ -3852,42 +4270,57 @@ def provider_requests(request):
         "unread_messages_count": total_unread_messages,
     }
 
-    return render(
-        request,
-        "Myapp/provider_requests.html",
-        {
-            "provider": provider,
-            "pending_offers": pending_offers,
-            "pending_offers_count": pending_offers_count,
-            "latest_pending_offer_id": latest_pending_offer_id,
-            "pending_offers_page_obj": pending_offers_page_obj,
-            "waiting_customer_selection_offers": waiting_customer_selection_offers,
-            "waiting_customer_selection_page_obj": waiting_customer_selection_page_obj,
-            "waiting_customer_selection_count": waiting_customer_selection_count,
-            "recent_offers": recent_offers,
-            "recent_offers_page_obj": recent_offers_page_obj,
-            "pending_appointments": pending_appointments,
-            "pending_appointments_count": pending_appointments_count,
-            "pending_appointments_page_obj": pending_appointments_page_obj,
-            "confirmed_appointments": confirmed_appointments,
-            "confirmed_appointments_page_obj": confirmed_appointments_page_obj,
-            "recent_appointments": recent_appointments,
-            "recent_appointments_page_obj": recent_appointments_page_obj,
-            "active_threads": active_threads,
-            "active_threads_page_obj": active_threads_page_obj,
-            "total_unread_messages": total_unread_messages,
-            "waiting_schedule_count": waiting_schedule_count,
-            "waiting_selection_page_query": waiting_selection_page_query,
-            "pending_offer_page_query": pending_offer_page_query,
-            "active_thread_page_query": active_thread_page_query,
-            "pending_appointment_page_query": pending_appointment_page_query,
-            "confirmed_appointment_page_query": confirmed_appointment_page_query,
-            "recent_offer_page_query": recent_offer_page_query,
-            "recent_appointment_page_query": recent_appointment_page_query,
-            "provider_live_snapshot": provider_live_snapshot,
-            "calendar_enabled": calendar_enabled,
-        },
-    )
+    return {
+        "provider": provider,
+        "pending_offers": pending_offers,
+        "pending_offers_count": pending_offers_count,
+        "latest_pending_offer_id": latest_pending_offer_id,
+        "pending_offers_page_obj": pending_offers_page_obj,
+        "waiting_customer_selection_offers": waiting_customer_selection_offers,
+        "waiting_customer_selection_page_obj": waiting_customer_selection_page_obj,
+        "waiting_customer_selection_count": waiting_customer_selection_count,
+        "recent_offers": recent_offers,
+        "recent_offers_page_obj": recent_offers_page_obj,
+        "pending_appointments": pending_appointments,
+        "pending_appointments_count": pending_appointments_count,
+        "pending_appointments_page_obj": pending_appointments_page_obj,
+        "confirmed_appointments": confirmed_appointments,
+        "confirmed_appointments_page_obj": confirmed_appointments_page_obj,
+        "recent_appointments": recent_appointments,
+        "recent_appointments_page_obj": recent_appointments_page_obj,
+        "active_threads": active_threads,
+        "active_threads_page_obj": active_threads_page_obj,
+        "total_unread_messages": total_unread_messages,
+        "waiting_schedule_count": waiting_schedule_count,
+        "waiting_selection_page_query": waiting_selection_page_query,
+        "pending_offer_page_query": pending_offer_page_query,
+        "active_thread_page_query": active_thread_page_query,
+        "pending_appointment_page_query": pending_appointment_page_query,
+        "confirmed_appointment_page_query": confirmed_appointment_page_query,
+        "recent_offer_page_query": recent_offer_page_query,
+        "recent_appointment_page_query": recent_appointment_page_query,
+        "provider_live_snapshot": provider_live_snapshot,
+        "calendar_enabled": calendar_enabled,
+        "provider_panel_partial_url": build_panel_partial_url(request),
+    }
+
+
+@login_required
+def provider_requests(request):
+    refresh_marketplace_lifecycle()
+    provider, blocked_response = get_verified_provider_or_redirect(request)
+    if blocked_response:
+        return blocked_response
+    is_partial = is_panel_partial_request(request)
+    context = build_provider_panel_context(request, provider)
+    if is_partial:
+        return render_panel_partial_response(
+            request,
+            template_name="Myapp/partials/provider_panel_content.html",
+            context=context,
+            snapshot=context["provider_live_snapshot"],
+        )
+    return render(request, "Myapp/provider_requests.html", context)
 
 
 @login_required
