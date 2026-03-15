@@ -14,7 +14,7 @@ NC_CITY_DISTRICT_MAP = {
         "Lapta",
     ],
     "Gazima\u011fusa": [
-        "Suri\u00e7i",
+        "Suriçi",
         "Tuzla",
         "Karakol",
         "Do\u011fu Akdeniz",

@@ -2106,6 +2106,32 @@ class MarketplaceTests(TestCase):
         self.assertContains(response, "Teklif notu gorunsun.")
         self.assertContains(response, "Usta randevu notu gorunsun.")
 
+    def test_my_requests_shows_pending_selection_request_only_once(self):
+        customer = User.objects.create_user(username="teksecimmusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Tek Secim Musteri",
+            customer_phone="05001235556",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Secim bekleyen talep tek yerde gorunmeli",
+            customer=customer,
+            status="pending_customer",
+        )
+        ProviderOffer.objects.create(
+            service_request=service_request,
+            provider=self.provider_ali,
+            token="SINGLESEL1",
+            sequence=1,
+            status="accepted",
+        )
+
+        self.client.login(username="teksecimmusteri", password="GucluSifre123!")
+        response = self.client.get(reverse("my_requests"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, service_request.display_code, count=1)
+
     def test_my_requests_shows_recent_change_badge_for_new_message(self):
         customer = User.objects.create_user(username="rozetmusteri", password="GucluSifre123!")
         service_request = ServiceRequest.objects.create(
@@ -3300,7 +3326,7 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertIn(service_request.display_code, payload["html"])
-        self.assertIn("S\u0131radaki aksiyon", payload["html"])
+        self.assertIn("Mesajlar", payload["html"])
         self.assertEqual(get_total_unread_notifications_count(customer), unread_before)
 
     def test_provider_requests_partial_returns_html_without_marking_notifications_read(self):
@@ -3344,7 +3370,7 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertIn(service_request.display_code, payload["html"])
-        self.assertIn("S\u0131radaki aksiyon", payload["html"])
+        self.assertIn("Hemen Cevap Ver", payload["html"])
         self.assertEqual(get_total_unread_notifications_count(self.provider_user_ali), unread_before)
 
     def test_notifications_unread_count_endpoint_reflects_read_state(self):

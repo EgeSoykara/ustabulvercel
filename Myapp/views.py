@@ -3338,9 +3338,13 @@ def build_customer_panel_context(request):
         "provider_offers__provider",
         "matched_provider__availability_slots",
     )
-    requests_page_obj = paginate_items(request, requests_qs, per_page=10, page_param="page")
+    pending_selection_items = list(
+        requests_qs.filter(status="pending_customer").order_by("-created_at")
+    )
+    main_requests_qs = requests_qs.exclude(status="pending_customer")
+    requests_page_obj = paginate_items(request, main_requests_qs, per_page=10, page_param="page")
     requests = list(requests_page_obj.object_list)
-    request_ids = [item.id for item in requests]
+    request_ids = [item.id for item in requests + pending_selection_items]
     rating_map = {
         rating.service_request_id: rating
         for rating in ProviderRating.objects.filter(service_request_id__in=request_ids)
@@ -3363,8 +3367,7 @@ def build_customer_panel_context(request):
     latest_message_map = build_latest_incoming_message_map(request_ids, "customer")
     latest_workflow_event_map = build_latest_workflow_event_map(request_ids, request.user)
     now = timezone.now()
-    pending_selection_items = []
-    for item in requests:
+    for item in requests + pending_selection_items:
         item.rating_entry = rating_map.get(item.id)
         item.appointment_entry = appointment_map.get(item.id)
         item.is_highlighted = highlight_request_id == item.id
@@ -3444,8 +3447,6 @@ def build_customer_panel_context(request):
             latest_message=latest_message_map.get(item.id),
             latest_event=latest_workflow_event_map.get(item.id),
         )
-        if item.status == "pending_customer":
-            pending_selection_items.append(item)
     cancelled_count = requests_qs.filter(status="cancelled").count()
     all_request_ids = list(requests_qs.values_list("id", flat=True))
     waiting_provider_appointment_count = 0

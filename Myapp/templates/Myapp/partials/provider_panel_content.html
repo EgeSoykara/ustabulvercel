@@ -3,18 +3,18 @@
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
       <h1 class="h4 mb-0"><i class="bi bi-briefcase-fill me-2"></i>Usta Paneli</h1>
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <span class="small text-muted">{{ provider.full_name }} - {{ provider.city }}/{{ provider.district }}</span>
+        <span class="small text-muted">{{ provider.full_name }} · {{ provider.city }}/{{ provider.district }}</span>
         <a href="{% url 'provider_profile' %}" class="btn btn-sm btn-outline-secondary">Profil</a>
         <a href="{% url 'agreement_history' %}" class="btn btn-sm btn-outline-secondary">Anlaşmalar</a>
       </div>
     </div>
 
     <div class="row g-2 mb-3">
-      <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Yeni Talep</div><div class="h5 mb-0">{{ pending_offers_count }}</div></div></div>
-      <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Müşteri Seçimi Bekleyen</div><div class="h5 mb-0">{{ waiting_customer_selection_count }}</div></div></div>
-      <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Aktif Mesaj</div><div class="h5 mb-0">{{ total_unread_messages }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Yeni talepler</div><div class="h5 mb-0">{{ pending_offers_count }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Karar bekleyen</div><div class="h5 mb-0">{{ waiting_customer_selection_count }}</div></div></div>
+      <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Okunmamış mesaj</div><div class="h5 mb-0">{{ total_unread_messages }}</div></div></div>
       {% if calendar_enabled %}
-        <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Randevu Onayı Bekleyen</div><div class="h5 mb-0">{{ pending_appointments_count }}</div></div></div>
+        <div class="col-md-3"><div class="border rounded p-2"><div class="small text-muted">Randevu onayı</div><div class="h5 mb-0">{{ pending_appointments_count }}</div></div></div>
       {% endif %}
     </div>
   </div>
@@ -22,7 +22,13 @@
 
 <section class="card panel-card shadow-sm mb-4" id="pending-offers">
   <div class="card-body p-4">
-    <h2 class="h5 mb-3">Yeni Talepler</h2>
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="h5 mb-1">Hemen Cevap Ver</h2>
+        <p class="small text-muted mb-0">Bu listedeki işler senden karar bekliyor.</p>
+      </div>
+    </div>
+
     {% if pending_offers %}
       <div class="d-grid gap-3">
         {% for offer in pending_offers %}
@@ -34,28 +40,33 @@
                 <span class="request-change-badge tone-{{ offer.recent_change_tone }}">{{ offer.recent_change_label }}</span>
               {% endif %}
             </div>
+
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
               <div>
                 <h3 class="h6 mb-1">{{ offer.service_request.service_type.name }}</h3>
                 <div class="small text-muted">{{ offer.service_request.city }} / {{ offer.service_request.district }} · {{ offer.sent_at|date:"d.m.Y H:i" }}</div>
-                <div class="small mt-1"><strong>{{ offer.service_request.customer_name }}</strong> ({{ offer.service_request.customer_phone }})</div>
+                <div class="small mt-1"><strong>{{ offer.service_request.customer_name }}</strong> · {{ offer.service_request.customer_phone }}</div>
               </div>
-              <span class="badge text-bg-secondary">{{ offer.service_request.get_status_display }}</span>
+              <span class="status-pill status-{{ offer.service_request.status }}">{{ offer.service_request.get_status_display }}</span>
             </div>
-            <div class="request-flow-card tone-{{ offer.flow_tone }} mt-3">
+
+            <div class="request-flow-card is-minimal tone-{{ offer.flow_tone }} mt-3">
               <div class="request-flow-head">
                 <strong>{{ offer.flow_title }}</strong>
               </div>
-              <div class="small">{{ offer.flow_hint }}</div>
-              <div class="small"><strong>Sıradaki aksiyon:</strong> {{ offer.flow_next_action }}</div>
+              <div class="small request-flow-focus">{{ offer.flow_next_action }}</div>
             </div>
-            <div class="small mt-2 request-detail-preview">{{ offer.service_request.details|truncatechars:180 }}</div>
-            {% if offer.service_request.details|length > 180 %}
-              <details class="mt-2 border rounded p-2">
-                <summary class="small fw-semibold">Talep detayını aç</summary>
-                <div class="small mt-2 request-detail-preview">{{ offer.service_request.details|linebreaksbr }}</div>
-              </details>
-            {% endif %}
+
+            <div class="request-meta-stack">
+              <div class="request-meta-line request-detail-preview">{{ offer.service_request.details|truncatechars:180 }}</div>
+              {% if offer.service_request.details|length > 180 %}
+                <details class="request-secondary-actions">
+                  <summary>Talep detayını aç</summary>
+                  <div class="small mt-2 request-detail-preview">{{ offer.service_request.details|linebreaksbr }}</div>
+                </details>
+              {% endif %}
+            </div>
+
             <div class="d-flex flex-column gap-2 mt-3">
               <input
                 type="text"
@@ -88,10 +99,16 @@
 {% if waiting_customer_selection_offers %}
   <section class="card panel-card shadow-sm mb-4" id="waiting-selection">
     <div class="card-body p-4">
-      <h2 class="h5 mb-3">Müşteri Seçimi Bekleyen Teklifler</h2>
-      <div class="d-grid gap-2">
+      <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <h2 class="h5 mb-1">Müşteri Kararı Bekleyenler</h2>
+          <p class="small text-muted mb-0">Teklif verdin, şimdi müşterinin seçmesini bekliyorsun.</p>
+        </div>
+      </div>
+
+      <div class="d-grid gap-3">
         {% for offer in waiting_customer_selection_offers %}
-          <div id="waiting-selection-card-{{ offer.service_request.id }}" class="border rounded p-3 {% if offer.is_highlighted %}panel-card-highlight{% endif %}">
+          <article id="waiting-selection-card-{{ offer.service_request.id }}" class="border rounded p-3 {% if offer.is_highlighted %}panel-card-highlight{% endif %}">
             <div class="request-card-kicker">
               <span class="request-card-code">{{ offer.service_request.display_code }}</span>
               <span class="request-flow-step">{{ offer.flow_step }}</span>
@@ -99,32 +116,34 @@
                 <span class="request-change-badge tone-{{ offer.recent_change_tone }}">{{ offer.recent_change_label }}</span>
               {% endif %}
             </div>
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
               <div>
-                <strong>{{ offer.service_request.service_type.name }}</strong>
+                <h3 class="h6 mb-1">{{ offer.service_request.service_type.name }}</h3>
                 <div class="small text-muted">{{ offer.service_request.customer_name }} · {{ offer.responded_at|default:offer.sent_at|date:"d.m.Y H:i" }}</div>
               </div>
-              <span class="small text-muted">Müşteri seçimi bekleniyor</span>
+              <span class="status-pill status-pending_customer">Seçim bekleniyor</span>
             </div>
-            <div class="request-flow-card tone-{{ offer.flow_tone }} mt-3">
+
+            <div class="request-flow-card is-minimal tone-{{ offer.flow_tone }} mt-3">
               <div class="request-flow-head">
                 <strong>{{ offer.flow_title }}</strong>
               </div>
-              <div class="small">{{ offer.flow_hint }}</div>
-              <div class="small"><strong>Sıradaki aksiyon:</strong> {{ offer.flow_next_action }}</div>
+              <div class="small request-flow-focus">{{ offer.flow_next_action }}</div>
             </div>
+
             {% if offer.can_withdraw_offer %}
-              <div class="small mt-2 text-muted">
-                Müşteri uzun süre yanıt vermezse teklifinizi geri çekebilirsiniz.
-              </div>
-              <form method="post" action="{% url 'provider_withdraw_offer' offer.id %}" class="m-0 mt-2" data-confirm-message="Bu teklifi geri çekmek istediğinize emin misiniz?">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger">
-                  <i class="bi bi-x-octagon me-1"></i>Teklifi Geri Çek
-                </button>
-              </form>
+              <details class="request-secondary-actions mt-3">
+                <summary>Diğer işlemler</summary>
+                <div class="secondary-action-list">
+                  <form method="post" action="{% url 'provider_withdraw_offer' offer.id %}" class="m-0" data-confirm-message="Bu teklifi geri çekmek istediğinize emin misiniz?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-octagon me-1"></i>Teklifi geri çek</button>
+                  </form>
+                </div>
+              </details>
             {% endif %}
-          </div>
+          </article>
         {% endfor %}
       </div>
     </div>
@@ -133,7 +152,13 @@
 
 <section class="card panel-card shadow-sm mb-4" id="active-threads">
   <div class="card-body p-4">
-    <h2 class="h5 mb-3">Aktif İşler</h2>
+    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+      <div>
+        <h2 class="h5 mb-1">Devam Eden İşler</h2>
+        <p class="small text-muted mb-0">Aktif eşleşmeler ve konuşmalar burada.</p>
+      </div>
+    </div>
+
     {% if active_threads %}
       <div class="d-grid gap-3">
         {% for thread in active_threads %}
@@ -145,65 +170,93 @@
                 <span class="request-change-badge tone-{{ thread.recent_change_tone }}">{{ thread.recent_change_label }}</span>
               {% endif %}
             </div>
+
             <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
               <div>
                 <h3 class="h6 mb-1">{{ thread.service_type.name }}</h3>
                 <div class="small text-muted">{{ thread.customer_name }} · {{ thread.city }} / {{ thread.district }}</div>
-                {% if thread.customer_phone %}
-                  <div class="small mt-1">
-                    <i class="bi bi-telephone me-1"></i>
-                    <a href="tel:{{ thread.customer_phone }}">{{ thread.customer_phone }}</a>
-                  </div>
-                {% endif %}
               </div>
+              <span class="status-pill status-matched">Aktif</span>
+            </div>
+
+            <div class="request-flow-card is-minimal tone-{{ thread.flow_tone }} mt-3">
+              <div class="request-flow-head">
+                <strong>{{ thread.flow_title }}</strong>
+              </div>
+              <div class="small request-flow-focus">{{ thread.flow_next_action }}</div>
+            </div>
+
+            <div class="request-meta-stack">
+              {% if thread.customer_phone %}
+                <div class="request-meta-line">
+                  <span class="request-meta-label">Telefon:</span>
+                  <a href="tel:{{ thread.customer_phone }}">{{ thread.customer_phone }}</a>
+                </div>
+              {% endif %}
+              {% if thread.appointment_entry %}
+                <div class="request-meta-line">
+                  <span class="request-meta-label">Randevu:</span>
+                  <span>
+                    {{ thread.appointment_entry.get_status_display }}
+                    {% if thread.appointment_entry.scheduled_for %}
+                      · {{ thread.appointment_entry.scheduled_for|date:"d.m.Y H:i" }}
+                    {% endif %}
+                  </span>
+                </div>
+              {% else %}
+                <div class="request-meta-line">
+                  <span class="request-meta-label">Durum:</span>
+                  <span>Müşteri henüz saat seçmedi.</span>
+                </div>
+              {% endif %}
+              {% if thread.appointment_entry and thread.appointment_entry.customer_note %}
+                <div class="request-meta-line request-detail-preview">
+                  <span class="request-meta-label">Müşteri notu:</span>
+                  <span>{{ thread.appointment_entry.customer_note|linebreaksbr }}</span>
+                </div>
+              {% endif %}
+              {% if thread.appointment_entry and thread.appointment_entry.provider_note %}
+                <div class="request-meta-line request-detail-preview">
+                  <span class="request-meta-label">Senin notun:</span>
+                  <span>{{ thread.appointment_entry.provider_note|linebreaksbr }}</span>
+                </div>
+              {% endif %}
+              {% if calendar_enabled and thread.appointment_entry and thread.appointment_entry.status == "pending" %}
+                <div class="request-meta-line">
+                  <span class="request-meta-label">Sonraki adım:</span>
+                  <a href="#pending-appointments">Randevu onayına git</a>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="request-primary-actions">
               <a href="{% url 'request_messages' thread.id %}" class="btn btn-sm btn-outline-secondary">
                 Mesajlar
                 {% if thread.unread_messages %}
                   <span class="badge text-bg-danger ms-1">{{ thread.unread_messages }}</span>
                 {% endif %}
               </a>
-            </div>
 
-            <div class="request-flow-card tone-{{ thread.flow_tone }} mt-3">
-              <div class="request-flow-head">
-                <strong>{{ thread.flow_title }}</strong>
-              </div>
-              <div class="small">{{ thread.flow_hint }}</div>
-              <div class="small"><strong>Sıradaki aksiyon:</strong> {{ thread.flow_next_action }}</div>
-            </div>
-
-            {% if calendar_enabled %}
-              {% if thread.appointment_entry and thread.appointment_entry.customer_note %}
-                <div class="small mt-2 request-detail-preview"><strong>Müşteri notu:</strong> {{ thread.appointment_entry.customer_note|linebreaksbr }}</div>
-              {% endif %}
-              {% if thread.appointment_entry and thread.appointment_entry.provider_note %}
-                <div class="small mt-1 request-detail-preview"><strong>Usta notunuz:</strong> {{ thread.appointment_entry.provider_note|linebreaksbr }}</div>
-              {% endif %}
-
-              {% if thread.appointment_entry and thread.appointment_entry.status == "pending" %}
-                <div class="small mt-2 text-muted">
-                  Bu randevuyu aşağıdaki <strong>Randevu Onayı Bekleyenler</strong> bölümünden yönetin.
-                </div>
-                <a href="#pending-appointments" class="btn btn-sm btn-outline-secondary mt-2">Randevu Onayına Git</a>
-              {% elif thread.appointment_entry %}
+              {% if calendar_enabled and thread.appointment_entry %}
                 {% if thread.appointment_entry.status == "confirmed" or thread.appointment_entry.status == "pending_customer" %}
-                  <form method="post" action="{% url 'provider_complete_appointment' thread.appointment_entry.id %}" class="m-0 mt-2" data-confirm-message="Bu işi tamamlandı olarak işaretlemek istediğinize emin misiniz?">
+                  <form method="post" action="{% url 'provider_complete_appointment' thread.appointment_entry.id %}" class="m-0" data-confirm-message="Bu işi tamamlandı olarak işaretlemek istediğinize emin misiniz?">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-outline-success">İşi Tamamla</button>
+                    <button type="submit" class="btn btn-sm btn-main">İşi bitir</button>
                   </form>
                 {% endif %}
               {% endif %}
-            {% endif %}
+            </div>
+
             {% if thread.can_release_match %}
-              <div class="small mt-2 text-muted">
-                Müşteri ilerlemiyorsa bu eşleşmeyi sonlandırıp talebi yeniden beklemeye alabilirsiniz.
-              </div>
-              <form method="post" action="{% url 'provider_release_request' thread.id %}" class="m-0 mt-2" data-confirm-message="Bu eşleşmeyi sonlandırmak istediğinize emin misiniz?">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger">
-                  <i class="bi bi-slash-circle me-1"></i>Eşleşmeyi Sonlandır
-                </button>
-              </form>
+              <details class="request-secondary-actions mt-3">
+                <summary>Diğer işlemler</summary>
+                <div class="secondary-action-list">
+                  <form method="post" action="{% url 'provider_release_request' thread.id %}" class="m-0" data-confirm-message="Bu eşleşmeyi sonlandırmak istediğinize emin misiniz?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-slash-circle me-1"></i>Eşleşmeyi sonlandır</button>
+                  </form>
+                </div>
+              </details>
             {% endif %}
           </article>
         {% endfor %}
@@ -217,10 +270,16 @@
 {% if calendar_enabled and pending_appointments %}
   <section class="card panel-card shadow-sm mb-4" id="pending-appointments">
     <div class="card-body p-4">
-      <h2 class="h5 mb-3">Randevu Onayı Bekleyenler</h2>
-      <div class="d-grid gap-2">
+      <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <h2 class="h5 mb-1">Onay Bekleyen Randevular</h2>
+          <p class="small text-muted mb-0">Bu bölümde sadece senden yanıt bekleyen randevular var.</p>
+        </div>
+      </div>
+
+      <div class="d-grid gap-3">
         {% for appointment in pending_appointments %}
-          <div id="pending-appointment-card-{{ appointment.service_request.id }}" class="border rounded p-3 {% if appointment.is_highlighted %}panel-card-highlight{% endif %}">
+          <article id="pending-appointment-card-{{ appointment.service_request.id }}" class="border rounded p-3 {% if appointment.is_highlighted %}panel-card-highlight{% endif %}">
             <div class="request-card-kicker">
               <span class="request-card-code">{{ appointment.service_request.display_code }}</span>
               <span class="request-flow-step">{{ appointment.flow_step }}</span>
@@ -228,28 +287,34 @@
                 <span class="request-change-badge tone-{{ appointment.recent_change_tone }}">{{ appointment.recent_change_label }}</span>
               {% endif %}
             </div>
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
               <div>
-                <strong>{{ appointment.service_request.service_type.name }}</strong>
+                <h3 class="h6 mb-1">{{ appointment.service_request.service_type.name }}</h3>
                 <div class="small text-muted">{{ appointment.service_request.customer_name }} · {{ appointment.scheduled_for|date:"d.m.Y H:i" }}</div>
                 {% if appointment.service_request.customer_phone %}
-                  <div class="small mt-1">
-                    <i class="bi bi-telephone me-1"></i>
-                    <a href="tel:{{ appointment.service_request.customer_phone }}">{{ appointment.service_request.customer_phone }}</a>
-                  </div>
+                  <div class="small mt-1"><strong>Telefon:</strong> {{ appointment.service_request.customer_phone }}</div>
                 {% endif %}
               </div>
+              <span class="status-pill status-pending">Onay bekliyor</span>
             </div>
-            <div class="request-flow-card tone-{{ appointment.flow_tone }} mt-3">
+
+            <div class="request-flow-card is-minimal tone-{{ appointment.flow_tone }} mt-3">
               <div class="request-flow-head">
                 <strong>{{ appointment.flow_title }}</strong>
               </div>
-              <div class="small">{{ appointment.flow_hint }}</div>
-              <div class="small"><strong>Sıradaki aksiyon:</strong> {{ appointment.flow_next_action }}</div>
+              <div class="small request-flow-focus">{{ appointment.flow_next_action }}</div>
             </div>
+
             {% if appointment.customer_note %}
-              <div class="small mt-2 request-detail-preview"><strong>Müşteri notu:</strong> {{ appointment.customer_note|linebreaksbr }}</div>
+              <div class="request-meta-stack">
+                <div class="request-meta-line request-detail-preview">
+                  <span class="request-meta-label">Müşteri notu:</span>
+                  <span>{{ appointment.customer_note|linebreaksbr }}</span>
+                </div>
+              </div>
             {% endif %}
+
             <div class="d-flex flex-column gap-2 mt-3">
               <input
                 type="text"
@@ -270,7 +335,7 @@
                 </form>
               </div>
             </div>
-          </div>
+          </article>
         {% endfor %}
       </div>
     </div>
