@@ -2739,22 +2739,6 @@ def provider_profile_view(request):
     )
 
 
-def get_message_quick_replies(viewer_role):
-    if viewer_role == "provider":
-        return [
-            "Merhaba, talebinizi aldım.",
-            "Müsaitim, detaylari paylasirsaniz hemen baslayabilirim.",
-            "Yola çıktım, kısa süre içinde ulaşacağım.",
-            "Fotoğraf paylaşırsanız daha net yönlendirebilirim.",
-        ]
-    return [
-        "Merhaba, müsait misiniz",
-        "Ne zaman gelebileceginizi yazabilir misiniz.",
-        "Adres detayını paylaşıyorum.",
-        "Teşekkürler, onaylıyorum.",
-    ]
-
-
 def serialize_service_message(message_item, viewer_role):
     return {
         "id": message_item.id,
@@ -2918,7 +2902,6 @@ def request_messages(request, request_id):
             "latest_message_id": latest_message_id,
             "form": form,
             "back_url": back_url,
-            "quick_reply_options": get_message_quick_replies(viewer_role),
             "fallback_poll_interval_ms": get_request_messages_fallback_poll_interval_seconds() * 1000,
         },
     )

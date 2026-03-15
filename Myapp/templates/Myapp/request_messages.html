@@ -62,19 +62,6 @@
             <button type="submit" class="btn btn-main w-100"><i class="bi bi-send-fill me-1"></i>G&#246;nder</button>
           </div>
         </form>
-
-        {% if quick_reply_options %}
-          <div class="message-quick-replies mt-3">
-            <div class="small text-muted mb-2">Haz&#305;r yan&#305;tlar</div>
-            <div class="message-quick-grid">
-              {% for quick_reply in quick_reply_options %}
-                <button type="button" class="btn btn-sm btn-outline-secondary message-quick-btn" data-quick-reply="{{ quick_reply|escapejs }}">
-                  {{ quick_reply }}
-                </button>
-              {% endfor %}
-            </div>
-          </div>
-        {% endif %}
         <div id="chat-form-status" class="small mt-2 d-none"></div>
       </div>
     </div>
@@ -94,7 +81,6 @@
     const statusBox = document.getElementById("chat-form-status");
     const textarea = form.querySelector("textarea[name='body']");
     const submitButton = form.querySelector("button[type='submit']");
-    const quickReplyButtons = document.querySelectorAll("[data-quick-reply]");
     const wsSupported = typeof window.WebSocket !== "undefined";
 
     let latestId = Number(thread.dataset.latestId || 0);
@@ -215,9 +201,6 @@
       stopPolling();
       if (textarea) textarea.disabled = true;
       if (submitButton) submitButton.disabled = true;
-      quickReplyButtons.forEach(function (button) {
-        button.disabled = true;
-      });
       setStatus(reasonText || "Mesajla\u015fma \u015fu anda kapal\u0131.", true);
     }
 
@@ -345,16 +328,6 @@
         sending = false;
         if (!pollingStopped) submitButton.disabled = false;
       }
-    });
-
-    quickReplyButtons.forEach(function (button) {
-      button.addEventListener("click", function () {
-        if (!textarea || textarea.disabled) return;
-        const quickReply = button.getAttribute("data-quick-reply") || "";
-        textarea.value = quickReply;
-        textarea.focus();
-        textarea.setSelectionRange(quickReply.length, quickReply.length);
-      });
     });
 
     document.addEventListener("visibilitychange", function () {

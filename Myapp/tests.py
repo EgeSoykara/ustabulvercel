@@ -2368,6 +2368,36 @@ class MarketplaceTests(TestCase):
             ).exists()
         )
 
+    def test_request_messages_page_does_not_show_quick_replies(self):
+        customer = User.objects.create_user(username="chatminimal", password="GucluSifre123!")
+        matched_request = ServiceRequest.objects.create(
+            customer_name="Chat Minimal Musteri",
+            customer_phone="05006660001",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Hazir yanitlar kaldirildi mi testi",
+            matched_provider=self.provider_ali,
+            customer=customer,
+            status="matched",
+        )
+        selected_offer = ProviderOffer.objects.create(
+            service_request=matched_request,
+            provider=self.provider_ali,
+            token="CHATMINI1",
+            sequence=1,
+            status="accepted",
+        )
+        matched_request.matched_offer = selected_offer
+        matched_request.save(update_fields=["matched_offer"])
+
+        self.client.login(username="chatminimal", password="GucluSifre123!")
+        response = self.client.get(reverse("request_messages", args=[matched_request.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Hazır yanıtlar")
+        self.assertNotContains(response, "data-quick-reply")
+
     def test_provider_cannot_message_before_customer_selects_provider(self):
         customer = User.objects.create_user(username="chatnoselect", password="GucluSifre123!")
         pending_request = ServiceRequest.objects.create(

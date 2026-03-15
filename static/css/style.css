@@ -1585,25 +1585,6 @@ body.live-sync-attention .panel-card {
   color: var(--text-soft);
 }
 
-.message-quick-replies {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
-
-.message-quick-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 6px;
-}
-
-.message-quick-btn {
-  text-align: left;
-}
-
-[data-theme="dark"] .message-quick-replies {
-  border-top-color: rgba(148, 163, 184, 0.28);
-}
-
 .notification-list {
   display: grid;
   gap: 10px;
