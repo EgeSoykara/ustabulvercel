@@ -22,6 +22,7 @@
           data-snapshot-url="{% url 'request_messages_snapshot' service_request.id %}"
           data-latest-id="{{ latest_message_id }}"
           data-fallback-poll-ms="{{ fallback_poll_interval_ms }}"
+          data-websocket-enabled="{{ websocket_realtime_enabled|yesno:'1,0' }}"
         >
           {% for item in messages_list %}
             <article class="chat-bubble {% if item.sender_role == viewer_role %}mine{% else %}theirs{% endif %}" data-message-id="{{ item.id }}">
@@ -89,7 +90,9 @@
     const retryButton = document.getElementById("chat-form-retry");
     const textarea = form.querySelector("textarea[name='body']");
     const submitButton = form.querySelector("button[type='submit']");
-    const wsSupported = typeof window.WebSocket !== "undefined";
+    const wsSupported =
+      thread.dataset.websocketEnabled === "1" &&
+      typeof window.WebSocket !== "undefined";
 
     let latestId = Number(thread.dataset.latestId || 0);
     let sending = false;

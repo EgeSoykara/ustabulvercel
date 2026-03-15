@@ -57,6 +57,27 @@ def env_csv(name, default=""):
     return [item.strip() for item in str(raw_value).split(",") if item.strip()]
 
 
+def env_choice(name, default, allowed_values):
+    raw_value = os.getenv(name, "").strip().lower()
+    if raw_value in allowed_values:
+        return raw_value
+    return default
+
+
+def normalize_hostname(raw_value):
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+    if "://" in value:
+        value = value.split("://", 1)[1]
+    return value.split("/", 1)[0].strip()
+
+
+def append_unique(items, value):
+    if value and value not in items:
+        items.append(value)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -84,6 +105,8 @@ MOBILE_JWT_SIGNING_KEY = (
 DJANGO_ENV = os.getenv("DJANGO_ENV", "local").strip().lower()
 IS_PRODUCTION = DJANGO_ENV == "production"
 IS_TEST = "test" in sys.argv
+VERCEL_ENV = os.getenv("VERCEL_ENV", "").strip().lower()
+IS_VERCEL = env_bool("VERCEL", False) or bool(VERCEL_ENV)
 
 default_debug = not IS_PRODUCTION
 DEBUG = env_bool("DJANGO_DEBUG", default_debug)
@@ -119,6 +142,20 @@ if DEBUG:
         "https://localhost:8000",
     ]
 CSRF_TRUSTED_ORIGINS = env_csv("DJANGO_CSRF_TRUSTED_ORIGINS", ",".join(default_csrf_origins))
+
+if IS_VERCEL:
+    append_unique(ALLOWED_HOSTS, ".vercel.app")
+    append_unique(CSRF_TRUSTED_ORIGINS, "https://*.vercel.app")
+
+for vercel_hostname in (
+    os.getenv("VERCEL_URL", ""),
+    os.getenv("VERCEL_BRANCH_URL", ""),
+    os.getenv("VERCEL_PROJECT_PRODUCTION_URL", ""),
+):
+    normalized_hostname = normalize_hostname(vercel_hostname)
+    append_unique(ALLOWED_HOSTS, normalized_hostname)
+    if normalized_hostname:
+        append_unique(CSRF_TRUSTED_ORIGINS, f"https://{normalized_hostname}")
 
 # Render dynamic hostname support (e.g. https://your-app.onrender.com)
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME", "").strip()
@@ -295,7 +332,7 @@ STATICFILES_DIRS=[
     ]
 
 HAS_WHITENOISE = importlib.util.find_spec("whitenoise") is not None
-USE_WHITENOISE = env_bool("USE_WHITENOISE", IS_PRODUCTION) and HAS_WHITENOISE
+USE_WHITENOISE = env_bool("USE_WHITENOISE", (IS_PRODUCTION and not IS_VERCEL)) and HAS_WHITENOISE
 if USE_WHITENOISE and "whitenoise.middleware.WhiteNoiseMiddleware" not in MIDDLEWARE:
     MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
     STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
@@ -326,6 +363,12 @@ SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = env_bool("CSRF_COOKIE_HTTPONLY", False)
 
 # Marketplace runtime knobs
+MARKETPLACE_LIFECYCLE_MODE = env_choice(
+    "MARKETPLACE_LIFECYCLE_MODE",
+    "request" if IS_VERCEL else "scheduler",
+    {"request", "scheduler"},
+)
+WEBSOCKETS_ENABLED = env_bool("WEBSOCKETS_ENABLED", not IS_VERCEL)
 CALENDAR_FEATURE_ENABLED = env_bool("CALENDAR_FEATURE_ENABLED", True)
 PROVIDER_AVAILABILITY_ENABLED = env_bool("PROVIDER_AVAILABILITY_ENABLED", False)
 OFFER_EXPIRY_MINUTES = int(os.getenv("OFFER_EXPIRY_MINUTES", "180"))

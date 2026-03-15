@@ -76,6 +76,11 @@ from .models import (
     ServiceType,
     WorkflowEvent,
 )
+from .runtime import (
+    are_websockets_enabled,
+    get_marketplace_lifecycle_mode,
+    is_scheduler_heartbeat_required,
+)
 
 PROVIDER_PENDING_APPROVAL_MESSAGE = "Usta hesabınız admin onayı bekliyor."
 PROVIDER_PENDING_APPROVAL_FLASH_FLAG = "_provider_pending_approval_warned"
@@ -2755,6 +2760,8 @@ def get_request_messages_group_name(request_id):
 
 
 def publish_service_message_event(message_item):
+    if not are_websockets_enabled():
+        return
     channel_layer = get_channel_layer()
     if channel_layer is None:
         return
@@ -2903,6 +2910,7 @@ def request_messages(request, request_id):
             "form": form,
             "back_url": back_url,
             "fallback_poll_interval_ms": get_request_messages_fallback_poll_interval_seconds() * 1000,
+            "websocket_realtime_enabled": are_websockets_enabled(),
         },
     )
 
@@ -3227,7 +3235,9 @@ def operations_dashboard(request):
     scheduler_heartbeat = SchedulerHeartbeat.objects.filter(worker_name="marketplace_lifecycle").first()
     scheduler_reference_at = None
     scheduler_age_seconds = None
-    scheduler_healthy = False
+    scheduler_mode = get_marketplace_lifecycle_mode()
+    scheduler_required = is_scheduler_heartbeat_required()
+    scheduler_healthy = not scheduler_required
     stale_after_seconds = get_lifecycle_heartbeat_stale_seconds()
     if scheduler_heartbeat:
         scheduler_reference_at = (
@@ -3237,7 +3247,8 @@ def operations_dashboard(request):
         )
     if scheduler_reference_at:
         scheduler_age_seconds = max(0, int((timezone.now() - scheduler_reference_at).total_seconds()))
-        scheduler_healthy = scheduler_age_seconds <= stale_after_seconds
+        if scheduler_required:
+            scheduler_healthy = scheduler_age_seconds <= stale_after_seconds
 
     daily_metrics = {
         "new_requests": ServiceRequest.objects.filter(created_at__date=selected_day).count(),
@@ -3323,6 +3334,8 @@ def operations_dashboard(request):
             "scheduler_healthy": scheduler_healthy,
             "scheduler_age_seconds": scheduler_age_seconds,
             "scheduler_stale_after_seconds": stale_after_seconds,
+            "scheduler_mode": scheduler_mode,
+            "scheduler_required": scheduler_required,
         },
     )
 
@@ -3767,19 +3780,27 @@ def lifecycle_health(request):
             return JsonResponse({"ok": False, "detail": "forbidden"}, status=403)
 
     worker_name = (request.GET.get("worker") or "marketplace_lifecycle").strip()[:80] or "marketplace_lifecycle"
+    lifecycle_mode = get_marketplace_lifecycle_mode()
+    scheduler_required = is_scheduler_heartbeat_required()
     stale_after_seconds = get_lifecycle_heartbeat_stale_seconds()
     now = timezone.now()
     heartbeat = SchedulerHeartbeat.objects.filter(worker_name=worker_name).first()
 
     if heartbeat is None:
         payload = {
-            "ok": False,
+            "ok": not scheduler_required,
             "worker_name": worker_name,
-            "status": "missing",
+            "mode": lifecycle_mode,
+            "heartbeat_required": scheduler_required,
+            "status": "missing" if scheduler_required else "request-driven",
             "stale_after_seconds": stale_after_seconds,
-            "message": "Scheduler heartbeat kaydı bulunamadı.",
+            "message": (
+                "Scheduler heartbeat kaydi bulunamadi."
+                if scheduler_required
+                else "Lifecycle yenilemeleri istekler sirasinda calisiyor; heartbeat zorunlu degil."
+            ),
         }
-        response = JsonResponse(payload, status=503)
+        response = JsonResponse(payload, status=503 if scheduler_required else 200)
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return response
 
@@ -3791,9 +3812,11 @@ def lifecycle_health(request):
         is_stale = age_seconds > stale_after_seconds
 
     payload = {
-        "ok": not is_stale,
+        "ok": (not is_stale) if scheduler_required else True,
         "worker_name": worker_name,
-        "status": "stale" if is_stale else "healthy",
+        "mode": lifecycle_mode,
+        "heartbeat_required": scheduler_required,
+        "status": "stale" if (scheduler_required and is_stale) else ("healthy" if scheduler_required else "request-driven"),
         "stale_after_seconds": stale_after_seconds,
         "age_seconds": age_seconds,
         "run_count": heartbeat.run_count,
@@ -3802,7 +3825,9 @@ def lifecycle_health(request):
         "last_error_at": heartbeat.last_error_at.isoformat() if heartbeat.last_error_at else None,
         "last_error": heartbeat.last_error,
     }
-    response = JsonResponse(payload, status=503 if is_stale else 200)
+    if not scheduler_required:
+        payload["heartbeat_status"] = "stale" if is_stale else "healthy"
+    response = JsonResponse(payload, status=503 if (scheduler_required and is_stale) else 200)
     response["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 

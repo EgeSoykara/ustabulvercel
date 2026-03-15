@@ -1639,6 +1639,16 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertFalse(response.json()["ok"])
 
+    @override_settings(MARKETPLACE_LIFECYCLE_MODE="request")
+    def test_lifecycle_health_endpoint_reports_request_driven_mode_without_heartbeat(self):
+        response = self.client.get(reverse("lifecycle_health"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "request-driven")
+        self.assertEqual(payload["mode"], "request")
+        self.assertFalse(payload["heartbeat_required"])
+
     def test_service_request_invalid_transition_is_rejected(self):
         request_item = ServiceRequest.objects.create(
             customer_name="Durum Test",
@@ -2399,6 +2409,36 @@ class MarketplaceTests(TestCase):
         self.assertNotContains(response, "data-quick-reply")
         self.assertContains(response, 'id="chat-form-retry"')
         self.assertContains(response, "Tekrar dene")
+
+    @override_settings(WEBSOCKETS_ENABLED=False)
+    def test_request_messages_page_disables_websocket_bootstrap_when_setting_false(self):
+        customer = User.objects.create_user(username="chatwsdisabled", password="GucluSifre123!")
+        matched_request = ServiceRequest.objects.create(
+            customer_name="Chat Websocket Musteri",
+            customer_phone="05006660009",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Websocket ayari testi",
+            matched_provider=self.provider_ali,
+            customer=customer,
+            status="matched",
+        )
+        selected_offer = ProviderOffer.objects.create(
+            service_request=matched_request,
+            provider=self.provider_ali,
+            token="CHATWS0001",
+            sequence=1,
+            status="accepted",
+        )
+        matched_request.matched_offer = selected_offer
+        matched_request.save(update_fields=["matched_offer"])
+
+        self.client.login(username="chatwsdisabled", password="GucluSifre123!")
+        response = self.client.get(reverse("request_messages", args=[matched_request.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-websocket-enabled="0"')
 
     def test_provider_cannot_message_before_customer_selects_provider(self):
         customer = User.objects.create_user(username="chatnoselect", password="GucluSifre123!")

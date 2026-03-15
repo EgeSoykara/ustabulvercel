@@ -52,10 +52,12 @@
         <tr>
           <th>Zamanlayıcı Durumu</th>
           <td>
-            {% if admin_ops_summary.scheduler_healthy %}
+            {% if admin_ops_summary.scheduler_required and admin_ops_summary.scheduler_healthy %}
               <span class="ops-badge ops-badge-ok">Sağlıklı</span>
-            {% else %}
+            {% elif admin_ops_summary.scheduler_required %}
               <span class="ops-badge ops-badge-danger">Uyarı</span>
+            {% else %}
+              <span class="ops-badge ops-badge-ok">Istek Bazli</span>
             {% endif %}
           </td>
         </tr>
@@ -66,7 +68,9 @@
         <tr>
           <th>Heartbeat Yaşı (sn)</th>
           <td>
-            {% if admin_ops_summary.scheduler_age_seconds is not None %}
+            {% if not admin_ops_summary.scheduler_required %}
+              Worker zorunlu degil
+            {% elif admin_ops_summary.scheduler_age_seconds is not None %}
               {% if admin_ops_summary.scheduler_healthy %}
                 <span class="ops-badge ops-badge-ok">{{ admin_ops_summary.scheduler_age_seconds }}</span>
               {% else %}

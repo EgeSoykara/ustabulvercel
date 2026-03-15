@@ -132,24 +132,37 @@
   <div class="card-body p-4">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
       <h2 class="h5 mb-0"><i class="bi bi-cpu me-2"></i>Scheduler ve Hata Durumu</h2>
-      {% if scheduler_healthy %}
+      {% if scheduler_required and scheduler_healthy %}
         <span class="status-pill status-completed">Scheduler: Sa&#287;l&#305;kl&#305;</span>
-      {% else %}
+      {% elif scheduler_required %}
         <span class="status-pill status-cancelled">Scheduler: Kontrol Gerekli</span>
+      {% else %}
+        <span class="status-pill status-completed">Lifecycle: Istek Bazli</span>
       {% endif %}
     </div>
     <div class="row g-3 mt-1">
       <div class="col-12 col-lg-7">
-        <div class="small text-muted">Marketplace worker heartbeat</div>
-        {% if scheduler_heartbeat %}
-          <div class="small mt-1">&Ccedil;al&#305;&#351;ma say&#305;s&#305;: <strong>{{ scheduler_heartbeat.run_count }}</strong></div>
-          <div class="small">Son ba&#351;ar&#305;: {% if scheduler_heartbeat.last_success_at %}{{ scheduler_heartbeat.last_success_at|date:"d.m.Y H:i:s" }}{% else %}-{% endif %}</div>
-          <div class="small">Ya&#351;: {% if scheduler_age_seconds != None %}{{ scheduler_age_seconds }} sn{% else %}-{% endif %} (limit {{ scheduler_stale_after_seconds }} sn)</div>
-          {% if scheduler_heartbeat.last_error %}
-            <div class="small text-danger mt-1">Son hata: {{ scheduler_heartbeat.last_error }}</div>
+        <div class="small text-muted">{% if scheduler_required %}Marketplace worker heartbeat{% else %}Marketplace lifecycle modu{% endif %}</div>
+        {% if scheduler_required %}
+          {% if scheduler_heartbeat %}
+            <div class="small mt-1">&Ccedil;al&#305;&#351;ma say&#305;s&#305;: <strong>{{ scheduler_heartbeat.run_count }}</strong></div>
+            <div class="small">Son ba&#351;ar&#305;: {% if scheduler_heartbeat.last_success_at %}{{ scheduler_heartbeat.last_success_at|date:"d.m.Y H:i:s" }}{% else %}-{% endif %}</div>
+            <div class="small">Ya&#351;: {% if scheduler_age_seconds != None %}{{ scheduler_age_seconds }} sn{% else %}-{% endif %} (limit {{ scheduler_stale_after_seconds }} sn)</div>
+            {% if scheduler_heartbeat.last_error %}
+              <div class="small text-danger mt-1">Son hata: {{ scheduler_heartbeat.last_error }}</div>
+            {% endif %}
+          {% else %}
+            <div class="small text-danger mt-1">Heartbeat kayd&#305; bulunamad&#305;.</div>
           {% endif %}
         {% else %}
-          <div class="small text-danger mt-1">Heartbeat kayd&#305; bulunamad&#305;.</div>
+          <div class="small mt-1">Bu deploy ortam&#305;nda s&uuml;rekli worker beklenmiyor.</div>
+          <div class="small">Zaman bazl&#305; ge&ccedil;i&#351;ler kullan&#305;c&#305; istekleri s&#305;ras&#305;nda yenileniyor.</div>
+          {% if scheduler_heartbeat %}
+            <div class="small mt-2">Opsiyonel cron son ba&#351;ar&#305;s&#305;: {% if scheduler_heartbeat.last_success_at %}{{ scheduler_heartbeat.last_success_at|date:"d.m.Y H:i:s" }}{% else %}-{% endif %}</div>
+            {% if scheduler_heartbeat.last_error %}
+              <div class="small text-danger mt-1">Son cron hatas&#305;: {{ scheduler_heartbeat.last_error }}</div>
+            {% endif %}
+          {% endif %}
         {% endif %}
       </div>
       <div class="col-12 col-lg-5">

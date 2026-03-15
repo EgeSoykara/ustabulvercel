@@ -8,6 +8,11 @@
 4. Health endpoint takip edilmeli (`/health/lifecycle/`).
 5. Admin hesabi deploy sirasinda otomatik olusmali.
 
+## Vercel deployment
+
+Vercel icin serverless uyumlu kurulum bu repoya eklendi. Ayrintilar ve Vercel'e ozel notlar icin `VERCEL_DEPLOY.md` dosyasina bakin.
+
+
 ## Render deployment (recommended)
 
 Bu repo artik `render.yaml` icerir. Render'da:

@@ -2,6 +2,7 @@
 .env.*
 !.env.local.example
 !.env.production.example
+!.env.vercel.example
 
 __pycache__/
 *.pyc
