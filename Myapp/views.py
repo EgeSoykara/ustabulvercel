@@ -563,7 +563,7 @@ def get_idempotency_retention_days():
 
 
 def get_workflow_event_retention_days():
-    return max(7, int(getattr(settings, "WORKFLOW_EVENT_RETENTION_DAYS", 90)))
+    return max(7, int(getattr(settings, "WORKFLOW_EVENT_RETENTION_DAYS", 30)))
 
 
 def get_activity_log_retention_days():
@@ -575,7 +575,7 @@ def get_error_log_retention_days():
 
 
 def get_message_retention_days():
-    configured = int(getattr(settings, "MESSAGE_RETENTION_DAYS", 120))
+    configured = int(getattr(settings, "MESSAGE_RETENTION_DAYS", 45))
     minimum = max(get_notification_retention_days(), 30)
     return max(minimum, configured)
 
@@ -5025,7 +5025,6 @@ def provider_release_request(request, request_id):
     with transaction.atomic():
         service_request = (
             ServiceRequest.objects.select_for_update()
-            .select_related("matched_offer")
             .filter(id=request_id, matched_provider=provider)
             .first()
         )
@@ -5044,13 +5043,20 @@ def provider_release_request(request, request_id):
         if not provider_can_release_request_match(
             service_request,
             appointment,
-            calendar_enabled=is_calendar_enabled(),
+                calendar_enabled=is_calendar_enabled(),
         ):
             messages.warning(request, "Bu iş için sonlandırma aksiyonu şu anda uygun değil.")
             return redirect("provider_requests")
 
         now = timezone.now()
-        matched_offer = service_request.matched_offer
+        matched_offer = None
+        if service_request.matched_offer_id:
+            matched_offer = (
+                ProviderOffer.objects.select_for_update()
+                .filter(id=service_request.matched_offer_id)
+                .first()
+            )
+
         if matched_offer and matched_offer.provider_id == provider.id and matched_offer.status == "accepted":
             matched_offer.status = "expired"
             matched_offer.responded_at = now

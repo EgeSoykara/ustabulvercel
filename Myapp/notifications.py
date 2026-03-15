@@ -49,9 +49,9 @@ def _truncate(text, max_len=180):
 
 def get_notification_retention_days():
     try:
-        configured = int(getattr(settings, "NOTIFICATION_RETENTION_DAYS", 60))
+        configured = int(getattr(settings, "NOTIFICATION_RETENTION_DAYS", 30))
     except (TypeError, ValueError):
-        configured = 60
+        configured = 30
     return max(7, configured)
 
 
