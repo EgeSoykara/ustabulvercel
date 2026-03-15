@@ -2,13 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "python scripts/vercel_build.py",
   "functions": {
-    "api/index.py": {
-      "runtime": "python3.12",
-      "maxDuration": 60,
-      "excludeFiles": "{mobile_app/**,.git/**,.github/**,.vscode/**,render.yaml,MOBILE_API.md,PRODUCTION_ENV.md,VERCEL_DEPLOY.md,static/**,staticfiles/**,**/test_*.py}"
-    },
-    "api/cron/lifecycle.py": {
-      "runtime": "python3.12",
+    "api/**/*.py": {
       "maxDuration": 60,
       "excludeFiles": "{mobile_app/**,.git/**,.github/**,.vscode/**,render.yaml,MOBILE_API.md,PRODUCTION_ENV.md,VERCEL_DEPLOY.md,static/**,staticfiles/**,**/test_*.py}"
     }
