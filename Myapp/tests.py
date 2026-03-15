@@ -773,15 +773,15 @@ class MarketplaceTests(TestCase):
             ProviderRating.objects.filter(provider=self.provider_mehmet, customer=user).exists()
         )
 
-    def test_customer_can_complete_matched_request(self):
-        user = User.objects.create_user(username="tamamlayan", password="GucluSifre123!")
+    def test_customer_can_cancel_matched_request_without_appointment(self):
+        user = User.objects.create_user(username="randevusuziptal", password="GucluSifre123!")
         service_request = ServiceRequest.objects.create(
-            customer_name="Tamamlayan Musteri",
+            customer_name="Randevusuz Iptal Musteri",
             customer_phone="05000001122",
             city="Lefkosa",
             district="Ortakoy",
             service_type=self.service,
-            details="Tamamlama testi",
+            details="Randevusuz kapatma iptal olarak kaydedilmeli",
             matched_provider=self.provider_ali,
             customer=user,
             status="matched",
@@ -792,12 +792,48 @@ class MarketplaceTests(TestCase):
             sender_role="customer",
             body="Is baslamadan once not.",
         )
-        self.client.login(username="tamamlayan", password="GucluSifre123!")
+        self.client.login(username="randevusuziptal", password="GucluSifre123!")
 
         self.client.post(reverse("complete_request", args=[service_request.id]), follow=True)
         service_request.refresh_from_db()
-        self.assertEqual(service_request.status, "completed")
+        self.assertEqual(service_request.status, "cancelled")
         self.assertEqual(ServiceMessage.objects.filter(service_request=service_request).count(), 0)
+        self.assertTrue(
+            WorkflowEvent.objects.filter(
+                target_type="request",
+                service_request=service_request,
+                to_status="cancelled",
+            ).exists()
+        )
+
+    def test_customer_can_complete_past_confirmed_appointment(self):
+        user = User.objects.create_user(username="randevutamamlayan", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Randevu Tamamlama Musteri",
+            customer_phone="05000001123",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Gecmis randevu tamamlanabilmeli",
+            matched_provider=self.provider_ali,
+            customer=user,
+            status="matched",
+        )
+        appointment = ServiceAppointment.objects.create(
+            service_request=service_request,
+            customer=user,
+            provider=self.provider_ali,
+            scheduled_for=timezone.now() - timedelta(hours=2),
+            status="confirmed",
+        )
+
+        self.client.login(username="randevutamamlayan", password="GucluSifre123!")
+        self.client.post(reverse("complete_request", args=[service_request.id]), follow=True)
+
+        service_request.refresh_from_db()
+        appointment.refresh_from_db()
+        self.assertEqual(service_request.status, "completed")
+        self.assertEqual(appointment.status, "completed")
 
     def test_customer_can_create_appointment_for_matched_request(self):
         user = User.objects.create_user(username="randevulu", password="GucluSifre123!")
@@ -2105,6 +2141,28 @@ class MarketplaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Teklif notu gorunsun.")
         self.assertContains(response, "Usta randevu notu gorunsun.")
+
+    def test_my_requests_shows_customer_cancelled_label_for_appointmentless_closed_request(self):
+        customer = User.objects.create_user(username="iptalgorunumusteri", password="GucluSifre123!")
+        service_request = ServiceRequest.objects.create(
+            customer_name="Iptal Gorunum Musteri",
+            customer_phone="05001235557",
+            city="Lefkosa",
+            district="Ortakoy",
+            service_type=self.service,
+            details="Randevusuz kapanan is iptal gorunmeli",
+            customer=customer,
+            matched_provider=self.provider_ali,
+            status="completed",
+        )
+
+        self.client.login(username="iptalgorunumusteri", password="GucluSifre123!")
+        response = self.client.get(reverse("my_requests"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, service_request.display_code)
+        self.assertContains(response, "Müşteri İptal Etti")
+        self.assertContains(response, "Talep iptal edildi")
 
     def test_my_requests_shows_pending_selection_request_only_once(self):
         customer = User.objects.create_user(username="teksecimmusteri", password="GucluSifre123!")

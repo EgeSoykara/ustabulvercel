@@ -73,7 +73,7 @@
                 <h3 class="h6 mb-1">{{ item.service_type.name }}</h3>
                 <div class="small text-muted">{{ item.city }} / {{ item.district }}</div>
               </div>
-              <span class="status-pill status-{{ item.status }}">{{ item.get_status_display }}</span>
+              <span class="status-pill status-{{ item.status_ui_class }}">{{ item.status_ui_label }}</span>
             </div>
 
             <div class="request-flow-card is-minimal tone-{{ item.flow_tone }} mt-3">
@@ -150,7 +150,7 @@
                 <h3 class="h6 mb-1">{{ item.service_type.name }}</h3>
                 <div class="small text-muted">{{ item.city }} / {{ item.district }} · {{ item.created_at|date:"d.m.Y H:i" }}</div>
               </div>
-              <span class="status-pill status-{{ item.status }}">{{ item.get_status_display }}</span>
+              <span class="status-pill status-{{ item.status_ui_class }}">{{ item.status_ui_label }}</span>
             </div>
 
             <div class="request-flow-card is-minimal tone-{{ item.flow_tone }} mt-3">
@@ -241,7 +241,12 @@
                   {% endif %}
                 {% endif %}
 
-                {% if item.can_complete_now %}
+                {% if item.can_cancel_now %}
+                  <form method="post" action="{% url 'complete_request' item.id %}" class="m-0" data-confirm-message="Bu eşleşmeyi iptal etmek istediğinize emin misiniz?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Talebi iptal et</button>
+                  </form>
+                {% elif item.can_complete_now %}
                   <form method="post" action="{% url 'complete_request' item.id %}" class="m-0" data-confirm-message="Bu işi tamamlandı olarak işaretlemek istediğinize emin misiniz?">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-main">İşi bitir</button>

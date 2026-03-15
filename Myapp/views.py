@@ -940,7 +940,7 @@ SERVICE_REQUEST_ALLOWED_TRANSITIONS = {
     "new": {"pending_provider", "cancelled"},
     "pending_provider": {"pending_customer", "matched", "new", "cancelled"},
     "pending_customer": {"pending_provider", "matched", "new", "cancelled"},
-    "matched": {"completed", "pending_provider", "pending_customer", "new"},
+    "matched": {"completed", "cancelled", "pending_provider", "pending_customer", "new"},
     "completed": set(),
     "cancelled": set(),
 }
@@ -1320,7 +1320,7 @@ def build_recent_change_from_event(event):
     if event.to_status == "completed":
         return {"label": "İş tamamlandı", "tone": "success"}
     if event.to_status == "cancelled":
-        return {"label": "Talep iptal edildi", "tone": "danger"}
+        return {"label": "Müşteri iptal etti", "tone": "danger"}
     return {"label": "Talep güncellendi", "tone": "info"}
 
 
@@ -1678,6 +1678,14 @@ def build_customer_flow_state(service_request, appointment, *, has_accepted_offe
                 "tone": "success",
             }
         has_completed_appointment = bool(appointment and appointment.status == "completed")
+        if not has_completed_appointment:
+            return {
+                "step": "Kapalı",
+                "title": "Talep iptal edildi",
+                "hint": "Randevu seçilmeden kapanan talepler iptal olarak gösterilir.",
+                "next_action": "Gerekirse yeni bir talep oluşturun.",
+                "tone": "muted",
+            }
         return {
             "step": "Adım 4/4",
             "title": "İş tamamlandı",
@@ -1694,12 +1702,25 @@ def build_customer_flow_state(service_request, appointment, *, has_accepted_offe
         return {
             "step": "Kapalı",
             "title": "Talep iptal edildi",
-            "hint": "Bu talep artık aktif değil.",
+            "hint": "Bu talep müşteri tarafından kapatıldı.",
             "next_action": "Gerekirse yeni bir talep oluşturun.",
             "tone": "muted",
         }
 
     return flow
+
+
+def get_service_request_status_ui(service_request, appointment=None, *, calendar_enabled=None):
+    is_calendar_active = is_calendar_enabled() if calendar_enabled is None else bool(calendar_enabled)
+    if service_request.status == "cancelled":
+        return {"label": "Müşteri İptal Etti", "css_status": "cancelled"}
+    if (
+        is_calendar_active
+        and service_request.status == "completed"
+        and not (appointment and appointment.status == "completed")
+    ):
+        return {"label": "Müşteri İptal Etti", "css_status": "cancelled"}
+    return {"label": service_request.get_status_display(), "css_status": service_request.status}
 
 
 def build_provider_pending_offer_flow_state():
@@ -3370,6 +3391,13 @@ def build_customer_panel_context(request):
     for item in requests + pending_selection_items:
         item.rating_entry = rating_map.get(item.id)
         item.appointment_entry = appointment_map.get(item.id)
+        status_ui = get_service_request_status_ui(
+            item,
+            item.appointment_entry,
+            calendar_enabled=calendar_enabled,
+        )
+        item.status_ui_label = status_ui["label"]
+        item.status_ui_class = status_ui["css_status"]
         item.is_highlighted = highlight_request_id == item.id
         item.cancel_policy_note = ""
         item.cancel_policy_tone = "muted"
@@ -3405,15 +3433,17 @@ def build_customer_panel_context(request):
         item.recommended_offer_id = item.accepted_offers[0].id if item.accepted_offers else None
         item.unread_messages = unread_message_map.get(item.id, 0)
         item.can_complete_now = False
+        item.can_cancel_now = False
         item.complete_block_reason = ""
 
         if item.status == "matched" and calendar_enabled:
             appointment = item.appointment_entry
-            if appointment and appointment.status == "pending":
+            if appointment is None or appointment.status in {"rejected", "cancelled"}:
+                item.can_cancel_now = True
+            elif appointment.status == "pending":
                 item.complete_block_reason = "Bekleyen randevu talebi varken tamamlanamaz."
             elif (
-                appointment
-                and appointment.status in {"confirmed", "pending_customer"}
+                appointment.status in {"confirmed", "pending_customer"}
                 and appointment.scheduled_for
                 and appointment.scheduled_for > now
             ):
@@ -3531,6 +3561,13 @@ def agreement_history(request):
     }
     for item in agreements:
         item.appointment_entry = appointment_map.get(item.id)
+        status_ui = get_service_request_status_ui(
+            item,
+            item.appointment_entry,
+            calendar_enabled=is_calendar_enabled(),
+        )
+        item.status_ui_label = status_ui["label"]
+        item.status_ui_class = status_ui["css_status"]
 
     summary = agreements_qs.aggregate(
         total_count=Count("id"),
@@ -3817,6 +3854,26 @@ def complete_request(request, request_id):
 
     calendar_enabled = is_calendar_enabled()
     appointment = ServiceAppointment.objects.filter(service_request=service_request).first()
+    if calendar_enabled and (appointment is None or appointment.status in {"rejected", "cancelled"}):
+        if not transition_service_request_status(
+            service_request,
+            "cancelled",
+            actor_user=request.user,
+            actor_role=actor_role,
+            source="user",
+            note=(
+                "Müşteri randevu seçmeden eşleşmeyi iptal etti"
+                if appointment is None
+                else "Müşteri aktif olmayan randevu sonrası talebi iptal etti"
+            ),
+        ):
+            messages.warning(request, "Talep durumu güncellenemedi.")
+            return redirect("my_requests")
+
+        purge_request_messages(service_request.id)
+        messages.success(request, "Talep iptal edildi.")
+        return redirect("my_requests")
+
     if calendar_enabled and appointment and appointment.status == "pending":
         messages.warning(request, "Bekleyen randevu talebi varken talep tamamlanamaz.")
         return redirect("my_requests")

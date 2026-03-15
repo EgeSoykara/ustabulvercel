@@ -356,6 +356,8 @@ def mark_all_notifications_read(user):
 def _event_status_label(event, raw_status):
     if event.target_type == "appointment":
         return APPOINTMENT_STATUS_LABELS.get(raw_status, raw_status or "-")
+    if raw_status == "cancelled":
+        return "Müşteri İptal Etti"
     return REQUEST_STATUS_LABELS.get(raw_status, raw_status or "-")
 
 

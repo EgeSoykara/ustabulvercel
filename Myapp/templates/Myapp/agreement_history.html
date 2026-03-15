@@ -96,7 +96,7 @@
                     <span class="small text-muted">-</span>
                   {% endif %}
                 </td>
-                <td data-label="Durum"><span class="status-pill status-{{ item.status }}">{{ item.get_status_display }}</span></td>
+                <td data-label="Durum"><span class="status-pill status-{{ item.status_ui_class }}">{{ item.status_ui_label }}</span></td>
                 <td data-label="Randevu">
                   {% if item.appointment_entry %}
                     <div class="small fw-semibold">{{ item.appointment_entry.scheduled_for|date:"d.m.Y H:i" }}</div>
@@ -140,6 +140,5 @@
   </div>
 </section>
 {% endblock %}
-
 
 
